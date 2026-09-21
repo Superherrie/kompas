@@ -20,7 +20,7 @@ export interface Account { id: number; name: string; bank: string | null; purpos
 export interface SlipItem { name: string; qty?: number | null; amount: number | null }
 export interface Slip {
   id: number; image_path: string | null; merchant: string | null; slip_date: string | null; slip_time: string | null
-  total: number | null; vat: number | null; payment_method: string | null; card_last4: string | null
+  total: number | null; tip: number | null; vat: number | null; payment_method: string | null; card_last4: string | null
   items: SlipItem[]; status: 'new' | 'matched' | 'unmatched' | 'failed'; note: string | null; created_at: string
 }
 export interface Member { user_id: string; display_name: string; email: string | null; role: 'owner' | 'member' }

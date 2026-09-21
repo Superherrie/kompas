@@ -222,6 +222,9 @@ begin
     ins := ins + 1;
   end loop;
 
+  -- new bank lines may be the payment an earlier, still unmatched slip was waiting for
+  perform pf_match_slip(sl.id) from pf_slips sl where sl.status = 'unmatched' and sl.created_at > now() - interval '180 days';
+
   insert into pf_sync_log (source, received, inserted, note)
   values (p_source || ':' || p_account, jsonb_array_length(p_rows), ins, format('%s cleared, %s skipped', cleared, skipped));
   return jsonb_build_object('inserted', ins, 'cleared', cleared, 'skipped', skipped);
@@ -245,26 +248,7 @@ begin
   return cnt;
 end $$;
 
--- link a slip to the bank line it belongs to (same money, within a few days)
-create or replace function pf_match_slip(p_slip bigint) returns bigint
-language plpgsql security definer set search_path = public as $$
-declare s pf_slips; hit bigint;
-begin
-  if not (pf_is_member() or coalesce(auth.role(), '') = 'service_role') then raise exception 'not a household member'; end if;
-  select * into s from pf_slips where id = p_slip;
-  if s.total is null then return null; end if;
-  select id into hit from pf_transactions x
-   where x.amount = -s.total and x.slip_id is null
-     and x.txn_date between coalesce(s.slip_date, current_date) - 1 and coalesce(s.slip_date, current_date) + 5
-   order by abs(x.txn_date - coalesce(s.slip_date, current_date)) limit 1;
-  if hit is not null then
-    update pf_transactions set slip_id = p_slip where id = hit;
-    update pf_slips set status = 'matched' where id = p_slip;
-  else
-    update pf_slips set status = 'unmatched' where id = p_slip;
-  end if;
-  return hit;
-end $$;
+-- pf_match_slip / pf_find_payment: see 005_slip_tip_and_history.sql
 
 create or replace function pf_add_member(p_email text, p_name text) returns text
 language plpgsql security definer set search_path = public, auth as $$

@@ -65,7 +65,7 @@ export default function Slips() {
     if (input.current) input.current.value = ''
   }
 
-  async function saveDraft(d: SlipDraft & { category_id?: number | null }, blob: Blob, preview: string) {
+  async function saveDraft(d: SlipDraft & { category_id?: number | null; tip?: number }, blob: Blob, preview: string) {
     if (!session) return
     try {
       setStage({ step: 'working', label: 'Saving…', preview })
@@ -116,7 +116,7 @@ export default function Slips() {
                   <p className="text-sm flex items-start gap-1.5"><Icon name="check" size={16} className="text-good mt-0.5 shrink-0" />
                     {stage.txnId && !stage.created && 'Matched to the card payment already on your account.'}
                     {stage.created && 'Added as a pending transaction — the bank’s notification will confirm it.'}
-                    {!stage.txnId && (stage.slip.payment_method === 'cash' ? 'Cash slip saved (the ATM withdrawal already counts as the spend).' : 'Saved — no matching payment yet.')}
+                    {!stage.txnId && (stage.slip.payment_method === 'cash' ? 'Cash slip saved (the ATM withdrawal already counts as the spend).' : 'Saved — no matching payment on record. Once the statement is imported, open the slip and tap “Look for the payment again”.')}
                   </p>
                 </>
               )}
@@ -159,6 +159,7 @@ function SlipSheet({ slip, onClose, onChanged }: { slip: Slip; onClose: () => vo
       <p className="text-sm text-muted mb-3">{slip.slip_date ? dayLabel(slip.slip_date) : 'no date'}{slip.slip_time ? ` · ${slip.slip_time.slice(0, 5)}` : ''} · {slip.payment_method}{slip.card_last4 ? ` ···${slip.card_last4}` : ''}</p>
       <div className="rounded-2xl bg-surface-2 p-3 text-sm mb-3">
         {slip.items?.length ? slip.items.map((i, k) => <div key={k} className="flex justify-between py-0.5"><span className="truncate pr-3">{i.qty && i.qty !== 1 ? `${i.qty} × ` : ''}{i.name}</span><span className="num">{i.amount === null ? '' : rand(i.amount)}</span></div>) : <p className="text-muted">No line items read.</p>}
+        {slip.tip ? <div className="flex justify-between border-t border-line mt-1 pt-1"><span>Tip</span><span className="num">{rand(+slip.tip)}</span></div> : null}
       </div>
       {img && <img src={img} alt="Slip" className="rounded-2xl w-full mb-3" />}
       <div className="flex gap-2">
@@ -171,13 +172,27 @@ function SlipSheet({ slip, onClose, onChanged }: { slip: Slip; onClose: () => vo
 }
 
 /** OCR is never certain on thermal paper — the three things that matter (shop, total, date) are confirmed by eye before saving */
-function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; preview: string; onSave: (d: SlipDraft & { category_id?: number | null }) => void; onCancel: () => void }) {
+function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; preview: string; onSave: (d: SlipDraft & { category_id?: number | null; tip?: number }) => void; onCancel: () => void }) {
   const { categories } = useFinance()
   const [d, setD] = useState({ ...draft, date: draft.date ?? today() })
   const [total, setTotal] = useState(draft.total === null ? '' : draft.total.toFixed(2))
   const [cat, setCat] = useState<number | null>(null)
+  const [tipText, setTipText] = useState('')
   const [showText, setShowText] = useState(false)
   const amount = parseFloat(total.replace(',', '.'))
+  const tip = Math.max(0, parseFloat(tipText.replace(',', '.')) || 0)
+  const paid = (amount || 0) + tip
+
+  // look the payment up while the person is still checking the slip — also finds payments from months ago
+  const [found, setFound] = useState<{ id: number; txn_date: string; description: string; amount: number; account: string; inferred_tip: number | null } | null>()
+  useEffect(() => {
+    if (!(paid > 0)) { setFound(undefined); return }
+    const t = setTimeout(() => {
+      void supabase.rpc('pf_find_payment', { p_amount: paid, p_date: d.date || null, p_merchant: d.merchant, p_infer_tip: tip === 0 })
+        .then(({ data }) => setFound((data as typeof found[])?.[0] ?? null))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [paid, tip, d.date, d.merchant])
   const itemsSum = d.items.reduce((s, i) => s + (i.amount ?? 0), 0)
   return (
     <div className="text-left sm:flex gap-5">
@@ -188,8 +203,20 @@ function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; previe
         <input className="input" placeholder="Shop" value={d.merchant} onChange={e => setD({ ...d, merchant: e.target.value })} />
         <div className="grid grid-cols-2 gap-3">
           <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">R</span><input className="input !pl-8 num font-semibold" inputMode="decimal" placeholder="Total" value={total} onChange={e => setTotal(e.target.value)} /></div>
-          <input className="input" type="date" value={d.date ?? ''} onChange={e => setD({ ...d, date: e.target.value })} />
+          <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">Tip R</span><input className="input !pl-14 num" inputMode="decimal" placeholder="0" value={tipText} onChange={e => setTipText(e.target.value)} /></div>
         </div>
+        <div className="grid grid-cols-2 gap-3 items-center">
+          <input className="input" type="date" value={d.date ?? ''} onChange={e => setD({ ...d, date: e.target.value })} />
+          <p className="text-sm text-muted">Paid <span className="num font-semibold text-ink">{paid > 0 ? rand(paid) : '—'}</span>{tip > 0 && <span className="text-xs"> incl. tip</span>}</p>
+        </div>
+        {found !== undefined && paid > 0 && (
+          <p className={`text-sm rounded-xl p-2.5 flex items-start gap-1.5 ${found ? 'bg-good/12' : 'bg-surface-2 text-muted'}`}>
+            <Icon name={found ? 'check' : 'search'} size={16} className={`mt-0.5 shrink-0 ${found ? 'text-good' : ''}`} />
+            {found
+              ? <span>Payment found: <b>{found.description}</b> · {dayLabel(found.txn_date)} · {rand(found.amount)} ({found.account}){found.inferred_tip ? <> — card was charged {rand(found.inferred_tip)} more than the slip, which will be saved as the tip</> : null}</span>
+              : <span>No payment of {rand(paid)} on record yet{tip === 0 ? ' — if you added a tip on the card machine, enter it above' : ''}.</span>}
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <select className="input" value={d.payment_method} onChange={e => setD({ ...d, payment_method: e.target.value as SlipDraft['payment_method'] })}><option value="card">Paid by card</option><option value="cash">Paid cash</option><option value="unknown">Not sure</option></select>
           <CategorySelect categories={categories.filter(c => c.kind === 'expense')} value={cat} onChange={setCat} />
@@ -202,7 +229,7 @@ function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; previe
         )}
         <button className="text-xs text-muted underline" onClick={() => setShowText(t => !t)}>{showText ? 'Hide' : 'Show'} raw text</button>
         {showText && <pre className="text-[11px] bg-surface-2 rounded-xl p-2 max-h-40 overflow-auto whitespace-pre-wrap">{draft.text}</pre>}
-        <div className="flex gap-2"><button className="btn btn-ghost" onClick={onCancel}>Discard</button><button className="btn btn-coral flex-1" disabled={!(amount > 0) || !d.merchant.trim()} onClick={() => onSave({ ...d, total: amount, category_id: cat })}>Save slip</button></div>
+        <div className="flex gap-2"><button className="btn btn-ghost" onClick={onCancel}>Discard</button><button className="btn btn-coral flex-1" disabled={!(amount > 0) || !d.merchant.trim()} onClick={() => onSave({ ...d, total: amount, tip, category_id: cat })}>Save slip</button></div>
       </div>
     </div>
   )

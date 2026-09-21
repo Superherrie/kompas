@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: slip, error: insErr } = await admin.from("pf_slips").insert({
-      image_path: path, merchant: s.merchant, slip_date: s.date, slip_time: s.time, total: s.total, vat: s.vat,
+      image_path: path, merchant: s.merchant, slip_date: s.date, slip_time: s.time, total: s.total, tip: s.tip, vat: s.vat,
       payment_method: s.payment_method, card_last4: s.card_last4, items: s.items, raw: s, created_by: who.user?.id,
     }).select().single();
     if (insErr) return json({ error: insErr.message }, 500);
@@ -81,7 +81,8 @@ Deno.serve(async (req) => {
     let created = false;
     // 2) otherwise hold a pending line so today's spend is right now; the bank e-mail / statement adopts it later.
     //    Cash slips don't create a line — the ATM withdrawal was already counted.
-    if (!txnId && s.payment_method !== "cash") {
+    const recent = !s.date || Date.now() - new Date(s.date).getTime() < 8 * 86400_000;   // an old slip with no payment on record stays unmatched
+    if (!txnId && s.payment_method !== "cash" && recent) {
       const { data: accounts } = await admin.from("pf_accounts").select("id,name,card_last4");
       const acc = accounts?.find((a) => s.card_last4 && a.card_last4?.includes(s.card_last4)) ?? accounts?.find((a) => a.name === "Discovery") ?? accounts?.[0];
       const { data: ruled } = await admin.rpc("pf_categorise", { p_desc: s.merchant, p_account: acc?.id });
