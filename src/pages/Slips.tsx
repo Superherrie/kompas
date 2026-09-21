@@ -65,7 +65,7 @@ export default function Slips() {
     if (input.current) input.current.value = ''
   }
 
-  async function saveDraft(d: SlipDraft & { category_id?: number | null; tip?: number }, blob: Blob, preview: string) {
+  async function saveDraft(d: SlipDraft & { category_id?: number | null; tip?: number; claimable?: boolean }, blob: Blob, preview: string) {
     if (!session) return
     try {
       setStage({ step: 'working', label: 'Saving…', preview })
@@ -126,6 +126,8 @@ export default function Slips() {
         )}
       </Card>
 
+      <Claims slips={slips ?? []} onOpen={setView} onChanged={() => void reload()} />
+
       <Card title="Recent slips">
         {!slips?.length && <p className="text-sm text-muted">No slips yet.</p>}
         <div className="divide-y divide-line">
@@ -133,6 +135,7 @@ export default function Slips() {
             <button key={s.id} className="w-full flex items-center gap-3 py-2.5 text-left" onClick={() => setView(s)}>
               <Icon name="receipt" className="text-muted shrink-0" />
               <span className="flex-1 min-w-0"><span className="block truncate text-sm font-medium">{s.merchant ?? 'Unreadable slip'}</span><span className="text-xs text-muted">{s.slip_date ? dayLabel(s.slip_date) : '—'} · {s.items?.length ?? 0} items</span></span>
+              {s.claimable && <span className={`chip ${s.repaid_on ? '' : '!bg-gold/25 !text-ink'}`}>{s.repaid_on ? 'repaid' : s.claimed_on ? 'claimed' : 'to claim'}</span>}
               <span className={`chip ${s.status === 'matched' ? '!bg-good/15 !text-good' : s.status === 'failed' ? '!bg-bad/15 !text-bad' : ''}`}>{s.status}</span>
               <span className="num text-sm font-semibold w-24 text-right">{s.total === null ? '' : rand(+s.total)}</span>
             </button>
@@ -147,6 +150,8 @@ export default function Slips() {
 function SlipSheet({ slip, onClose, onChanged }: { slip: Slip; onClose: () => void; onChanged: () => void }) {
   const [img, setImg] = useState<string>()
   useEffect(() => { if (slip.image_path) void supabase.storage.from('pf-slips').createSignedUrl(slip.image_path, 600).then(({ data }) => setImg(data?.signedUrl)) }, [slip.image_path])
+  // tap again to undo
+  async function stamp(col: 'claimed_on' | 'repaid_on', current: string | null) { await supabase.from('pf_slips').update({ [col]: current ? null : today(), ...(col === 'repaid_on' && !current && !slip.claimed_on ? { claimed_on: today() } : {}) }).eq('id', slip.id); onChanged() }
   async function rematch() { await supabase.rpc('pf_match_slip', { p_slip: slip.id }); onChanged() }
   async function remove() {
     if (!confirm('Delete this slip and its photo?')) return
@@ -162,6 +167,16 @@ function SlipSheet({ slip, onClose, onChanged }: { slip: Slip; onClose: () => vo
         {slip.tip ? <div className="flex justify-between border-t border-line mt-1 pt-1"><span>Tip</span><span className="num">{rand(+slip.tip)}</span></div> : null}
       </div>
       {img && <img src={img} alt="Slip" className="rounded-2xl w-full mb-3" />}
+      <label className={`flex items-center gap-2.5 rounded-xl border p-3 mb-3 cursor-pointer ${slip.claimable ? 'border-pine bg-pine/10' : 'border-line'}`}>
+        <input type="checkbox" className="w-5 h-5 accent-[var(--pine)]" checked={slip.claimable} onChange={e => void supabase.rpc('pf_set_slip_claimable', { p_slip: slip.id, p_claimable: e.target.checked }).then(onChanged)} />
+        <span className="text-sm font-semibold">Claim back from work</span>
+      </label>
+      {slip.claimable && (
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <button className={`btn ${slip.claimed_on ? 'btn-primary' : 'btn-ghost'}`} onClick={() => void stamp('claimed_on', slip.claimed_on)}>{slip.claimed_on ? `Claimed ${dayLabel(slip.claimed_on)}` : 'Mark as claimed'}</button>
+          <button className={`btn ${slip.repaid_on ? 'btn-primary' : 'btn-ghost'}`} onClick={() => void stamp('repaid_on', slip.repaid_on)}>{slip.repaid_on ? `Repaid ${dayLabel(slip.repaid_on)}` : 'Mark as repaid'}</button>
+        </div>
+      )}
       <div className="flex gap-2">
         <button className="btn btn-ghost !text-bad" onClick={() => void remove()}>Delete</button>
         {slip.status !== 'matched' && <button className="btn btn-ghost flex-1" onClick={() => void rematch()}>Look for the payment again</button>}
@@ -172,12 +187,13 @@ function SlipSheet({ slip, onClose, onChanged }: { slip: Slip; onClose: () => vo
 }
 
 /** OCR is never certain on thermal paper — the three things that matter (shop, total, date) are confirmed by eye before saving */
-function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; preview: string; onSave: (d: SlipDraft & { category_id?: number | null; tip?: number }) => void; onCancel: () => void }) {
+function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; preview: string; onSave: (d: SlipDraft & { category_id?: number | null; tip?: number; claimable?: boolean }) => void; onCancel: () => void }) {
   const { categories } = useFinance()
   const [d, setD] = useState({ ...draft, date: draft.date ?? today() })
   const [total, setTotal] = useState(draft.total === null ? '' : draft.total.toFixed(2))
   const [cat, setCat] = useState<number | null>(null)
   const [tipText, setTipText] = useState('')
+  const [claimable, setClaimable] = useState(false)
   const [showText, setShowText] = useState(false)
   const amount = parseFloat(total.replace(',', '.'))
   const tip = Math.max(0, parseFloat(tipText.replace(',', '.')) || 0)
@@ -219,8 +235,12 @@ function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; previe
         )}
         <div className="grid grid-cols-2 gap-3">
           <select className="input" value={d.payment_method} onChange={e => setD({ ...d, payment_method: e.target.value as SlipDraft['payment_method'] })}><option value="card">Paid by card</option><option value="cash">Paid cash</option><option value="unknown">Not sure</option></select>
-          <CategorySelect categories={categories.filter(c => c.kind === 'expense')} value={cat} onChange={setCat} />
+          {claimable ? <div className="input text-muted text-sm flex items-center">Work expenses · to claim back</div> : <CategorySelect categories={categories.filter(c => c.kind === 'expense')} value={cat} onChange={setCat} />}
         </div>
+        <label className={`flex items-start gap-2.5 rounded-xl border p-3 cursor-pointer ${claimable ? 'border-pine bg-pine/10' : 'border-line'}`}>
+          <input type="checkbox" className="w-5 h-5 mt-0.5 accent-[var(--pine)]" checked={claimable} onChange={e => setClaimable(e.target.checked)} />
+          <span className="text-sm"><span className="font-semibold">Claim back from work</span><span className="block text-xs text-muted">Kept out of your spending and budget, and added to the claim list until work has paid it back.</span></span>
+        </label>
         {d.items.length > 0 && (
           <div className="rounded-2xl bg-surface-2 p-3 text-sm max-h-40 overflow-y-auto">
             {d.items.map((i, k) => <div key={k} className="flex justify-between gap-3 py-0.5"><span className="truncate">{i.qty ? `${i.qty} × ` : ''}{i.name}</span><span className="num">{i.amount === null ? '' : rand(i.amount)}</span></div>)}
@@ -234,8 +254,31 @@ function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; previe
         )}
         <button className="text-xs text-muted underline" onClick={() => setShowText(t => !t)}>{showText ? 'Hide' : 'Show'} raw text</button>
         {showText && <pre className="text-[11px] bg-surface-2 rounded-xl p-2 max-h-40 overflow-auto whitespace-pre-wrap">{draft.text}</pre>}
-        <div className="flex gap-2"><button className="btn btn-ghost" onClick={onCancel}>Discard</button><button className="btn btn-coral flex-1" disabled={!(amount > 0) || !d.merchant.trim()} onClick={() => onSave({ ...d, total: amount, tip, category_id: cat })}>Save slip</button></div>
+        <div className="flex gap-2"><button className="btn btn-ghost" onClick={onCancel}>Discard</button><button className="btn btn-coral flex-1" disabled={!(amount > 0) || !d.merchant.trim()} onClick={() => onSave({ ...d, total: amount, tip, category_id: cat, claimable })}>Save slip</button></div>
       </div>
     </div>
+  )
+}
+
+/** what work still owes: claimable slips not yet repaid, oldest first */
+function Claims({ slips, onOpen, onChanged }: { slips: Slip[]; onOpen: (s: Slip) => void; onChanged: () => void }) {
+  const { data: open, reload } = useLoad(async () => ((await supabase.from('pf_slips').select('*').eq('claimable', true).is('repaid_on', null).order('slip_date')).data ?? []) as Slip[], [slips.length, slips.filter(s => s.claimable).length, slips.filter(s => s.claimed_on).length, slips.filter(s => s.repaid_on).length])
+  if (!open?.length) return null
+  const todo = open.filter(s => !s.claimed_on), waiting = open.filter(s => s.claimed_on)
+  const sum = (a: Slip[]) => a.reduce((t, s) => t + +(s.total ?? 0), 0)
+  async function claimAll() { await supabase.from('pf_slips').update({ claimed_on: today() }).in('id', todo.map(s => s.id)); void reload(); onChanged() }
+  return (
+    <Card title="To claim from work" sub={`${rand(sum(todo))} still to hand in${waiting.length ? ` · ${rand(sum(waiting))} claimed, waiting to be repaid` : ''}`}
+      right={todo.length > 0 ? <button className="btn btn-ghost !py-1.5 !text-xs" onClick={() => void claimAll()}>Mark all as claimed</button> : undefined}>
+      <div className="divide-y divide-line">
+        {open.map(s => (
+          <button key={s.id} className="w-full flex items-center gap-3 py-2 text-left" onClick={() => onOpen(s)}>
+            <span className="flex-1 min-w-0"><span className="block truncate text-sm font-medium">{s.merchant}</span><span className="text-xs text-muted">{s.slip_date ? dayLabel(s.slip_date) : '—'}</span></span>
+            <span className={`chip ${s.claimed_on ? '' : '!bg-gold/25 !text-ink'}`}>{s.claimed_on ? 'claimed' : 'to claim'}</span>
+            <span className="num text-sm font-semibold w-20 text-right">{rand(+(s.total ?? 0))}</span>
+          </button>
+        ))}
+      </div>
+    </Card>
   )
 }

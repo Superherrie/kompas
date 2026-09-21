@@ -24,5 +24,7 @@ export interface Slip {
   id: number; image_path: string | null; merchant: string | null; slip_date: string | null; slip_time: string | null
   total: number | null; tip: number | null; vat: number | null; payment_method: string | null; card_last4: string | null
   items: SlipItem[]; status: 'new' | 'matched' | 'unmatched' | 'failed'; note: string | null; created_at: string
+  /** work pays this back: its payment sits outside household spend; claimed_on = handed in, repaid_on = money received */
+  claimable: boolean; claimed_on: string | null; repaid_on: string | null
 }
 export interface Member { user_id: string; display_name: string; email: string | null; role: 'owner' | 'member' }
