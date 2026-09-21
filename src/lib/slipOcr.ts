@@ -56,6 +56,17 @@ export function parseSlipText(text: string): SlipDraft {
     items.push({ name: (q ? q[2] : m[1]).trim(), qty: q ? +q[1] : null, amount: num(m[2]) })
   }
 
+  // Personal use: every line is shown VAT-inclusive. Most tills print inclusive prices already; when a slip lists
+  // exclusive lines (items + VAT = total, e.g. wholesalers and some restaurants) gross the lines up so they add to what was paid.
+  const sum = items.reduce((s, i) => s + (i.amount ?? 0), 0)
+  if (total !== null && vat !== null && vat > 0 && sum > 0 && Math.abs(sum + vat - total) <= 0.06 && Math.abs(sum - total) > 0.06) {
+    const k = total / sum
+    for (const i of items) if (i.amount !== null) i.amount = Math.round(i.amount * k * 100) / 100
+    const drift = Math.round((total - items.reduce((s, i) => s + (i.amount ?? 0), 0)) * 100) / 100      // rounding → largest line
+    const big = items.filter(i => i.amount !== null).sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))[0]
+    if (big && drift) big.amount = Math.round(((big.amount ?? 0) + drift) * 100) / 100
+  }
+
   return {
     merchant: merchant.replace(/[^\w &'().*/-]/g, '').trim(), date: findDate(text), time: text.match(/\b([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?\b/)?.slice(1, 3).join(':').padStart(5, '0') ?? null,
     total, vat, payment_method: paidCash ? 'cash' : paidCard ? 'card' : 'unknown', card_last4: cardLast4, items, text,

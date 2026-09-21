@@ -159,7 +159,6 @@ function SlipSheet({ slip, onClose, onChanged }: { slip: Slip; onClose: () => vo
       <p className="text-sm text-muted mb-3">{slip.slip_date ? dayLabel(slip.slip_date) : 'no date'}{slip.slip_time ? ` · ${slip.slip_time.slice(0, 5)}` : ''} · {slip.payment_method}{slip.card_last4 ? ` ···${slip.card_last4}` : ''}</p>
       <div className="rounded-2xl bg-surface-2 p-3 text-sm mb-3">
         {slip.items?.length ? slip.items.map((i, k) => <div key={k} className="flex justify-between py-0.5"><span className="truncate pr-3">{i.qty && i.qty !== 1 ? `${i.qty} × ` : ''}{i.name}</span><span className="num">{i.amount === null ? '' : rand(i.amount)}</span></div>) : <p className="text-muted">No line items read.</p>}
-        {slip.vat !== null && <div className="flex justify-between border-t border-line mt-1 pt-1 text-muted"><span>VAT</span><span className="num">{rand(+slip.vat)}</span></div>}
       </div>
       {img && <img src={img} alt="Slip" className="rounded-2xl w-full mb-3" />}
       <div className="flex gap-2">

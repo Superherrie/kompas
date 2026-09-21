@@ -20,7 +20,7 @@ const SlipSchema = z.object({
   tip: z.number().nullable(),
   payment_method: z.enum(["card", "cash", "eft", "other", "unknown"]),
   card_last4: z.string().nullable().describe("Last four digits of the card if printed"),
-  items: z.array(z.object({ name: z.string(), qty: z.number().nullable(), amount: z.number().nullable() })).describe("Line items; amount is the line total"),
+  items: z.array(z.object({ name: z.string(), qty: z.number().nullable(), amount: z.number().nullable() })).describe("Line items; amount is the line total INCLUDING VAT"),
   category: z.string().nullable().describe("Best fit from the supplied category list, copied exactly, or null"),
 });
 
@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
         role: "user",
         content: [
           { type: "image", source: { type: "base64", media_type: media, data: btoa(bin) } },
-          { type: "text", text: `This is a photo of a South African till slip (amounts in rand; dates are usually DD/MM/YYYY; today is ${new Date().toISOString().slice(0, 10)}). Extract it. Slips are often crumpled or faded — when a value can't be read, return null rather than guessing. The total is what was actually paid (after discounts, including any tip written or printed on a card slip).\n\nCategory list:\n${subs.map(label).join("\n")}` },
+          { type: "text", text: `This is a photo of a South African till slip (amounts in rand; dates are usually DD/MM/YYYY; today is ${new Date().toISOString().slice(0, 10)}). Extract it. Slips are often crumpled or faded — when a value can't be read, return null rather than guessing. The total is what was actually paid (after discounts, including any tip written or printed on a card slip). This is a personal budget, so every line item amount must be VAT-inclusive: most tills print inclusive prices — copy those as they are — but if the slip lists VAT-exclusive lines (the lines plus the VAT line add up to the total), add 15% VAT to each taxable line so the items sum to the total paid.\n\nCategory list:\n${subs.map(label).join("\n")}` },
         ],
       }],
     });
