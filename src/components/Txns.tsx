@@ -8,27 +8,37 @@ export function Amount({ value, className = '' }: { value: number; className?: s
   return <span className={`num font-semibold ${value > 0 ? 'text-good' : ''} ${className}`}>{value > 0 ? '+' : ''}{rand(value)}</span>
 }
 
-export function TxnRow({ t, onClick }: { t: Txn; onClick?: () => void }) {
+export function TxnRow({ t, onClick, onClaim }: { t: Txn; onClick?: () => void; onClaim?: (on: boolean) => void }) {
   return (
-    <button onClick={onClick} className="w-full flex items-center gap-3 py-2.5 text-left">
+    <div className="flex items-center gap-1">
+    <button onClick={onClick} className="min-w-0 flex-1 flex items-center gap-3 py-2.5 text-left">
       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: t.color ?? 'var(--muted)' }} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{t.description}</span>
         <span className="flex items-center gap-1.5 text-xs text-muted">
           <span className="truncate">{t.sub_name ?? 'Uncategorised'} · {t.account}{t.txn_time ? ` · ${t.txn_time.slice(0, 5)}` : ''}</span>
           {t.status === 'pending' && <span className="chip !py-0 !text-[10px] !bg-gold/25 !text-ink">pending</span>}
+          {t.claimable && <span className={`chip !py-0 !text-[10px] whitespace-nowrap ${t.repaid_on ? '' : '!bg-gold/25 !text-ink'}`}>{t.repaid_on ? 'repaid by work' : t.claimed_on ? 'claimed' : 'to claim'}</span>}
           {t.month !== t.cal_month && <span className="chip !py-0 !text-[10px] whitespace-nowrap">counts in {monthLabel(t.month, true)}</span>}
           {t.slip_id && <Icon name="receipt" size={13} />}
         </span>
       </span>
-      <Amount value={t.amount} className="text-sm shrink-0" />
+      <Amount value={t.amount} className={`text-sm shrink-0 ${t.claimable ? 'line-through decoration-1 opacity-60' : ''}`} />
     </button>
+    {onClaim && (t.amount < 0 || t.claimable) && (
+      <label className="shrink-0 flex flex-col items-center gap-0.5 pl-2 cursor-pointer" title="Claim back from work">
+        <input type="checkbox" className="w-5 h-5 accent-[var(--pine)]" checked={t.claimable} onChange={e => onClaim(e.target.checked)} />
+        <span className="text-[9px] leading-none text-muted">claim</span>
+      </label>
+    )}
+    </div>
   )
 }
 
 /** transactions grouped under day headings; tapping one opens the edit sheet */
-export function TxnList({ txns, categories, onChanged, dayTotals = true }: { txns: Txn[]; categories: Category[]; onChanged: () => void; dayTotals?: boolean }) {
+export function TxnList({ txns, categories, onChanged, dayTotals = true, claimTick = true }: { txns: Txn[]; categories: Category[]; onChanged: () => void; dayTotals?: boolean; claimTick?: boolean }) {
   const [open, setOpen] = useState<Txn>()
+  const claim = async (t: Txn, on: boolean) => { await supabase.rpc('pf_set_txn_claimable', { p_txn: t.id, p_claimable: on }); onChanged() }
   const days = useMemo(() => {
     const m = new Map<string, Txn[]>()
     for (const t of txns) m.set(t.txn_date, [...(m.get(t.txn_date) ?? []), t])
@@ -43,7 +53,7 @@ export function TxnList({ txns, categories, onChanged, dayTotals = true }: { txn
             <span>{dayLabel(d)}</span>
             {dayTotals && <span className="num">{rand(rows.filter(r => r.kind === 'expense').reduce((s, r) => s + r.amount, 0))}</span>}
           </div>
-          <div className="divide-y divide-line">{rows.map(t => <TxnRow key={t.id} t={t} onClick={() => setOpen(t)} />)}</div>
+          <div className="divide-y divide-line">{rows.map(t => <TxnRow key={t.id} t={t} onClick={() => setOpen(t)} onClaim={claimTick ? on => void claim(t, on) : undefined} />)}</div>
         </div>
       ))}
       {open && <TxnSheet t={open} categories={categories} onClose={() => setOpen(undefined)} onSaved={() => { setOpen(undefined); onChanged() }} />}
@@ -82,6 +92,7 @@ function TxnSheet({ t, categories, onClose, onSaved }: { t: Txn; categories: Cat
   const [remember, setRemember] = useState(true)
   const [note, setNote] = useState(t.note ?? '')
   const [period, setPeriod] = useState(t.month)
+  const [claimable, setClaimable] = useState(t.claimable)
   const [slip, setSlip] = useState<Slip>(); const [img, setImg] = useState<string>()
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string>()
 
@@ -95,7 +106,8 @@ function TxnSheet({ t, categories, onClose, onSaved }: { t: Txn; categories: Cat
 
   async function save() {
     setBusy(true); setError(undefined)
-    if (cat && cat !== t.sub_id) { const { error } = await supabase.rpc('pf_set_category', { p_txn: t.id, p_category: cat, p_remember: remember }); if (error) { setError(error.message); setBusy(false); return } }
+    if (cat && cat !== t.sub_id && !claimable) { const { error } = await supabase.rpc('pf_set_category', { p_txn: t.id, p_category: cat, p_remember: remember }); if (error) { setError(error.message); setBusy(false); return } }
+    if (claimable !== t.claimable) await supabase.rpc('pf_set_txn_claimable', { p_txn: t.id, p_claimable: claimable })
     if (period !== t.month) await supabase.rpc('pf_set_period', { p_txn: t.id, p_period: period })
     if (note !== (t.note ?? '')) await supabase.from('pf_transactions').update({ note: note || null }).eq('id', t.id)
     onSaved()
@@ -114,6 +126,12 @@ function TxnSheet({ t, categories, onClose, onSaved }: { t: Txn; categories: Cat
       <label className="block text-xs font-semibold text-muted mb-1">Category</label>
       <CategorySelect categories={categories} value={cat} onChange={setCat} />
       <label className="flex items-center gap-2 text-sm mt-2"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />Use this for every “{t.description.slice(0, 28)}”</label>
+      {(t.amount < 0 || t.claimable) && (
+        <label className={`flex items-center gap-2.5 rounded-xl border p-3 mt-3 cursor-pointer ${claimable ? 'border-pine bg-pine/10' : 'border-line'}`}>
+          <input type="checkbox" className="w-5 h-5 accent-[var(--pine)]" checked={claimable} onChange={e => setClaimable(e.target.checked)} />
+          <span className="text-sm"><span className="font-semibold">Claim back from work</span><span className="block text-xs text-muted">Kept out of your spending and budget until work has paid it back.</span></span>
+        </label>
+      )}
       <label className="block text-xs font-semibold text-muted mt-4 mb-1">Counts in</label>
       <select className="input" value={period} onChange={e => setPeriod(e.target.value)}>
         {[-1, 0, 1].map(k => addMonths(t.cal_month, k)).map(m => <option key={m} value={m}>{monthLabel(m)}{m === t.cal_month ? ' (the month it was paid)' : ''}</option>)}

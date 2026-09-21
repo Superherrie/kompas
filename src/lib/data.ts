@@ -18,7 +18,7 @@ export const getMonthly = () =>
   fetchAll<Monthly>(() => supabase.from('pf_v_monthly').select('*').order('month').order('sub_id').order('account'))
     .then(rows => rows.map(r => ({ ...r, total: +r.total })))
 
-export interface TxnFilter { /** accounting month(s) */ month?: string; months?: string[]; from?: string; to?: string; catId?: number; subId?: number; account?: string; search?: string; discretionary?: boolean; status?: string; limit?: number }
+export interface TxnFilter { /** accounting month(s) */ month?: string; months?: string[]; from?: string; to?: string; catId?: number; subId?: number; account?: string; search?: string; discretionary?: boolean; status?: string; claimable?: boolean; limit?: number }
 export async function getTxns(f: TxnFilter): Promise<Txn[]> {
   const build = () => {
     let q = supabase.from('pf_v_txns').select('*')
@@ -30,6 +30,7 @@ export async function getTxns(f: TxnFilter): Promise<Txn[]> {
     if (f.subId) q = q.eq('sub_id', f.subId)
     if (f.account) q = q.eq('account', f.account)
     if (f.status) q = q.eq('status', f.status)
+    if (f.claimable !== undefined) q = q.eq('claimable', f.claimable)
     if (f.discretionary !== undefined) q = q.eq('discretionary', f.discretionary).eq('kind', 'expense')
     if (f.search) q = q.ilike('description', `%${f.search.replace(/[%,]/g, ' ')}%`)
     return q.order('txn_date', { ascending: false }).order('txn_time', { ascending: false, nullsFirst: false }).order('id', { ascending: false })

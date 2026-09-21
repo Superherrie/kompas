@@ -10,6 +10,7 @@ import { Card } from '../components/Charts'
 import { CategorySelect, Sheet } from '../components/Txns'
 import Icon from '../components/Icon'
 import type { Slip } from '../lib/types'
+import Claims from '../components/Claims'
 
 /** phone photos are 4–12 MB; 1800px JPEG is plenty for a till slip and keeps the upload and the read fast */
 async function shrink(file: File, max = 1800): Promise<Blob> {
@@ -126,7 +127,7 @@ export default function Slips() {
         )}
       </Card>
 
-      <Claims slips={slips ?? []} onOpen={setView} onChanged={() => void reload()} />
+      <Claims version={slips} onChanged={() => { void reload(); void reloadFinance() }} />
 
       <Card title="Recent slips">
         {!slips?.length && <p className="text-sm text-muted">No slips yet.</p>}
@@ -151,7 +152,7 @@ function SlipSheet({ slip, onClose, onChanged }: { slip: Slip; onClose: () => vo
   const [img, setImg] = useState<string>()
   useEffect(() => { if (slip.image_path) void supabase.storage.from('pf-slips').createSignedUrl(slip.image_path, 600).then(({ data }) => setImg(data?.signedUrl)) }, [slip.image_path])
   // tap again to undo
-  async function stamp(col: 'claimed_on' | 'repaid_on', current: string | null) { await supabase.from('pf_slips').update({ [col]: current ? null : today(), ...(col === 'repaid_on' && !current && !slip.claimed_on ? { claimed_on: today() } : {}) }).eq('id', slip.id); onChanged() }
+  async function stamp(col: 'claimed_on' | 'repaid_on', current: string | null) { await supabase.rpc('pf_stamp_claim', { p_txn: null, p_slip: slip.id, p_what: col === 'claimed_on' ? 'claimed' : 'repaid', p_date: current ? null : today() }); onChanged() }
   async function rematch() { await supabase.rpc('pf_match_slip', { p_slip: slip.id }); onChanged() }
   async function remove() {
     if (!confirm('Delete this slip and its photo?')) return
@@ -260,25 +261,3 @@ function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; previe
   )
 }
 
-/** what work still owes: claimable slips not yet repaid, oldest first */
-function Claims({ slips, onOpen, onChanged }: { slips: Slip[]; onOpen: (s: Slip) => void; onChanged: () => void }) {
-  const { data: open, reload } = useLoad(async () => ((await supabase.from('pf_slips').select('*').eq('claimable', true).is('repaid_on', null).order('slip_date')).data ?? []) as Slip[], [slips.length, slips.filter(s => s.claimable).length, slips.filter(s => s.claimed_on).length, slips.filter(s => s.repaid_on).length])
-  if (!open?.length) return null
-  const todo = open.filter(s => !s.claimed_on), waiting = open.filter(s => s.claimed_on)
-  const sum = (a: Slip[]) => a.reduce((t, s) => t + +(s.total ?? 0), 0)
-  async function claimAll() { await supabase.from('pf_slips').update({ claimed_on: today() }).in('id', todo.map(s => s.id)); void reload(); onChanged() }
-  return (
-    <Card title="To claim from work" sub={`${rand(sum(todo))} still to hand in${waiting.length ? ` · ${rand(sum(waiting))} claimed, waiting to be repaid` : ''}`}
-      right={todo.length > 0 ? <button className="btn btn-ghost !py-1.5 !text-xs" onClick={() => void claimAll()}>Mark all as claimed</button> : undefined}>
-      <div className="divide-y divide-line">
-        {open.map(s => (
-          <button key={s.id} className="w-full flex items-center gap-3 py-2 text-left" onClick={() => onOpen(s)}>
-            <span className="flex-1 min-w-0"><span className="block truncate text-sm font-medium">{s.merchant}</span><span className="text-xs text-muted">{s.slip_date ? dayLabel(s.slip_date) : '—'}</span></span>
-            <span className={`chip ${s.claimed_on ? '' : '!bg-gold/25 !text-ink'}`}>{s.claimed_on ? 'claimed' : 'to claim'}</span>
-            <span className="num text-sm font-semibold w-20 text-right">{rand(+(s.total ?? 0))}</span>
-          </button>
-        ))}
-      </div>
-    </Card>
-  )
-}

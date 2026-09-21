@@ -7,9 +7,10 @@ import { Card } from '../components/Charts'
 import { CategorySelect, Sheet, TxnList } from '../components/Txns'
 import { MonthNav, useMonthParam } from './Categories'
 import Icon from '../components/Icon'
+import Claims from '../components/Claims'
 import type { Account } from '../lib/types'
 
-type Filter = 'all' | 'disc' | 'pending' | 'uncat'
+type Filter = 'all' | 'disc' | 'pending' | 'uncat' | 'claim'
 
 export default function Transactions() {
   const { categories, reload: reloadFinance } = useFinance()
@@ -22,7 +23,7 @@ export default function Transactions() {
   const uncat = categories.find(c => c.name === 'Uncategorised' && c.parent_id !== null)?.id
   // a search looks across all months; otherwise stay inside the chosen month
   const { data: txns, reload } = useLoad(() => getTxns({
-    ...(q ? { search: q, limit: 300 } : { month }),
+    ...(q ? { search: q, limit: 300 } : filter === 'claim' ? { claimable: true } : { month }),      // claims run across months
     ...(account ? { account } : {}), ...(filter === 'disc' ? { discretionary: true } : {}), ...(filter === 'pending' ? { status: 'pending' } : {}),
     ...(filter === 'uncat' && uncat ? { subId: uncat } : {}),
   }), [month, q, filter, account, uncat])
@@ -33,16 +34,17 @@ export default function Transactions() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="display text-3xl md:text-4xl">Transactions</h1>
-        <div className="flex items-center gap-2">{!q && <MonthNav month={month} onChange={setMonth} />}<button className="btn btn-primary" onClick={() => setAdding(true)}>+ Add</button></div>
+        <div className="flex items-center gap-2">{!q && filter !== 'claim' && <MonthNav month={month} onChange={setMonth} />}<button className="btn btn-primary" onClick={() => setAdding(true)}>+ Add</button></div>
       </div>
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-52"><Icon name="search" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" /><input className="input !pl-10" placeholder="Search every month…" value={search} onChange={e => setSearch(e.target.value)} /></div>
         <select className="input !w-auto" value={account} onChange={e => setAccount(e.target.value)}><option value="">All accounts</option><option>FNB</option><option>Discovery</option></select>
       </div>
       <div className="flex gap-2 overflow-x-auto">
-        {([['all', 'All'], ['disc', 'Discretionary'], ['pending', 'Pending'], ['uncat', 'Uncategorised']] as [Filter, string][]).map(([k, l]) =>
+        {([['all', 'All'], ['disc', 'Discretionary'], ['pending', 'Pending'], ['uncat', 'Uncategorised'], ['claim', 'Work claims']] as [Filter, string][]).map(([k, l]) =>
           <button key={k} onClick={() => setFilter(k)} className={`chip !text-sm !px-3 !py-1 whitespace-nowrap ${filter === k ? '!bg-pine !text-surface' : ''}`}>{l}</button>)}
       </div>
+      {filter === 'claim' && <Claims version={txns} onChanged={refresh} />}
       <Card title={`${txns?.length ?? 0} transactions`} sub={`${rand0(out)} out`}>
         <TxnList txns={txns ?? []} categories={categories} onChanged={refresh} />
       </Card>

@@ -9,6 +9,8 @@ export interface Txn {
   kind: Kind; discretionary: boolean; color: string | null
   /** month = accounting month (month-end FNB lines count in the next one); cal_month = the calendar month of txn_date */
   cal_month: string; period_locked: boolean
+  /** work pays it back (category Work expenses > To claim back): outside spend; claimed_on = handed in, repaid_on = money received */
+  claimable: boolean; claimed_on: string | null; repaid_on: string | null
 }
 export interface Monthly {
   month: string; cat_id: number; cat_name: string; sub_id: number; sub_name: string
