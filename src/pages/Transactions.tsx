@@ -40,7 +40,7 @@ export default function Transactions() {
         <div className="relative flex-1 min-w-52"><Icon name="search" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" /><input className="input !pl-10" placeholder="Search every month…" value={search} onChange={e => setSearch(e.target.value)} /></div>
         <select className="input !w-auto" value={account} onChange={e => setAccount(e.target.value)}><option value="">All accounts</option><option>FNB</option><option>Discovery</option></select>
       </div>
-      <div className="flex gap-2 overflow-x-auto">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
         {([['all', 'All'], ['disc', 'Discretionary'], ['pending', 'Pending'], ['uncat', 'Uncategorised'], ['claim', 'Work claims']] as [Filter, string][]).map(([k, l]) =>
           <button key={k} onClick={() => setFilter(k)} className={`chip !text-sm !px-3 !py-1 whitespace-nowrap ${filter === k ? '!bg-pine !text-surface' : ''}`}>{l}</button>)}
       </div>

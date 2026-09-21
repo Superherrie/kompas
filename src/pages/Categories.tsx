@@ -65,7 +65,7 @@ export default function Categories() {
         <MonthNav month={month} onChange={setMonth} />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-full bg-surface-2 p-1 text-sm">
+        <div className="inline-flex max-w-full overflow-x-auto no-scrollbar rounded-full bg-surface-2 p-1 text-sm whitespace-nowrap">
           {([['all', 'Everything'], ['disc', 'Discretionary'], ['fixed', 'Fixed & essential']] as [Scope, string][]).map(([k, l]) =>
             <button key={k} onClick={() => setScope(k)} className={`px-3 py-1 rounded-full font-medium ${scope === k ? 'bg-surface shadow-sm' : 'text-muted'}`}>{l}</button>)}
         </div>
@@ -88,7 +88,7 @@ export default function Categories() {
                 <div className="mt-3 ml-4 space-y-1">
                   {[...c.subs.values()].sort((a, b) => b.now - a.now).map(s => (
                     <Link key={s.id} to={`/categories/sub/${s.id}?m=${month}`} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 hover:bg-surface-2">
-                      <span className="text-sm">{s.name}{s.disc && <span className="chip ml-2 !py-0">discretionary</span>}<span className="text-xs text-muted ml-2">{s.n} txn{s.n === 1 ? '' : 's'}</span></span>
+                      <span className="text-sm min-w-0"><span className="block truncate">{s.name}</span><span className="text-xs text-muted">{s.n} txn{s.n === 1 ? '' : 's'}{s.disc ? ' · discretionary' : ''}</span></span>
                       <span className="num text-sm flex items-center gap-2"><span className="text-xs text-muted hidden sm:inline">usual {rand0(s.usual)}</span><span className="font-semibold">{rand0(s.now)}</span><Icon name="right" size={14} className="text-muted" /></span>
                     </Link>
                   ))}
@@ -171,7 +171,7 @@ export function CategoryDetail() {
             <button key={v.vendor} onClick={() => setVendor(vendor === v.vendor ? undefined : v.vendor)} className={`w-full text-left py-2.5 ${vendor === v.vendor ? 'bg-pine/10 -mx-2 px-2 rounded-xl' : ''}`}>
               <div className="flex items-baseline justify-between gap-3 mb-1">
                 <span className="text-sm font-medium truncate">{v.vendor}</span>
-                <span className="num text-sm whitespace-nowrap"><span className="text-xs text-muted mr-2">{v.n}× · {rand0(v.total / v.n)} avg{span > 1 ? ` · ${rand0(v.total / span)}/mo` : ''}</span><span className="font-semibold">{rand0(v.total)}</span><span className="text-xs text-muted ml-1.5 inline-block w-8 text-right">{Math.round((v.total / Math.max(1, vendorTotal)) * 100)}%</span></span>
+                <span className="num text-sm whitespace-nowrap"><span className="text-xs text-muted mr-2">{v.n}×<span className="hidden sm:inline"> · {rand0(v.total / v.n)} avg</span>{span > 1 ? ` · ${rand0(v.total / span)}/mo` : ''}</span><span className="font-semibold">{rand0(v.total)}</span><span className="text-xs text-muted ml-1.5 inline-block w-8 text-right">{Math.round((v.total / Math.max(1, vendorTotal)) * 100)}%</span></span>
               </div>
               <Bar value={v.total} max={vendorMax} color={me?.color ?? parent?.color ?? undefined} />
             </button>

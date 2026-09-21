@@ -44,5 +44,20 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); 
 .input:focus { outline: 2px solid var(--pine); outline-offset: 1px; }
 .chip { display: inline-flex; align-items: center; gap: .35rem; border-radius: 999px; padding: .2rem .6rem; font-size: .72rem; font-weight: 600; background: var(--surface-2); color: var(--muted); }
 
+/* ---- iPhone ---- */
+html { -webkit-text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+button, a, label, select, input[type=checkbox], input[type=radio] { touch-action: manipulation; }   /* no 300ms delay / double-tap zoom */
+/* iOS gives date and select inputs an intrinsic width that pushes a two-column grid off the screen */
+input[type=date], input[type=time], select { min-width: 0; max-width: 100%; }
+input[type=date] { -webkit-appearance: none; appearance: none; min-height: 2.75rem; text-align: left; }
+input[type=date]::-webkit-date-and-time-value { text-align: left; }
+.no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
+@media (max-width: 767px) {
+  .card { border-radius: 18px; padding-left: 1rem; padding-right: 1rem; }
+  .btn { min-height: 2.75rem; }                       /* 44pt touch target */
+  .chip { min-height: 1.5rem; }
+}
+
 /* iOS zooms inputs under 16px */
 @media (max-width: 640px) { input, select, textarea { font-size: 16px !important; } }

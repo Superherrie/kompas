@@ -1,4 +1,5 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Icon, { Logo } from './Icon'
 import { useAuth } from '../context/AuthContext'
 
@@ -12,12 +13,17 @@ const NAV = [
   { to: '/import', label: 'Import', icon: 'upload' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
-// phone tab bar: two either side of the camera button
-const TABS = [NAV[0], NAV[2], null, NAV[3], NAV[1]]
+// phone tab bar: the three everyday screens, the camera in the middle, and "More" for everything else
+const TABS = [NAV[0], NAV[2], null, NAV[3]]
+const MORE = [NAV[1], NAV[4], NAV[5], NAV[6], NAV[7]]
 
 export default function Layout() {
   const { member, signOut } = useAuth()
-  const nav = useNavigate()
+  const nav = useNavigate(); const loc = useLocation()
+  const [more, setMore] = useState(false)
+  useEffect(() => { window.scrollTo(0, 0) }, [loc.pathname])       // a new screen starts at the top
+  const inMore = MORE.some(n => loc.pathname.startsWith(n.to))
+
   return (
     <div className="min-h-full md:flex">
       {/* desktop rail */}
@@ -38,34 +44,51 @@ export default function Layout() {
         </div>
       </aside>
 
-      <main className="flex-1 md:ml-60 pb-28 md:pb-10">
-        <header className="md:hidden flex items-center justify-between px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-2">
-          <div className="flex items-center gap-2"><Logo size={28} /><span className="display text-xl">Kompas</span></div>
-          <div className="flex items-center gap-1 text-muted">
-            <NavLink to="/claims" className="p-2" aria-label="Claims recon"><Icon name="briefcase" /></NavLink>
-            <NavLink to="/import" className="p-2"><Icon name="upload" /></NavLink>
-            <NavLink to="/settings" className="p-2"><Icon name="settings" /></NavLink>
-          </div>
+      <main className="flex-1 min-w-0 md:ml-60 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-10">
+        {/* phone: a slim brand bar that sits under the notch / Dynamic Island */}
+        <header className="md:hidden sticky top-0 z-20 flex items-center gap-2 px-4 pt-[max(env(safe-area-inset-top),0.6rem)] pb-2 bg-bg/90 backdrop-blur">
+          <Logo size={26} /><span className="display text-lg">Kompas</span>
         </header>
         <div className="mx-auto max-w-6xl px-4 md:px-8 md:pt-8"><Outlet /></div>
       </main>
 
       {/* phone tab bar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface/95 backdrop-blur border-t border-line pb-[env(safe-area-inset-bottom)]">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface/95 backdrop-blur border-t border-line pb-[env(safe-area-inset-bottom)] select-none">
         <div className="grid grid-cols-5 items-end">
           {TABS.map((n, i) => n ? (
-            <NavLink key={n.to} to={n.to} end={n.end}
-              className={({ isActive }) => `flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${isActive ? 'text-pine' : 'text-muted'}`}>
-              <Icon name={n.icon} size={22} />{n.label}
+            <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setMore(false)}
+              className={({ isActive }) => `flex flex-col items-center gap-0.5 pt-2.5 pb-2 text-[11px] font-medium ${isActive ? 'text-pine' : 'text-muted'}`}>
+              <Icon name={n.icon} size={23} />{n.label}
             </NavLink>
           ) : (
             <button key={i} onClick={() => nav('/slips?scan=1')} aria-label="Scan a slip"
-              className="mx-auto -mt-6 mb-2 grid place-items-center w-14 h-14 rounded-full bg-coral text-white shadow-lg shadow-coral/30 active:scale-95 transition">
+              className="mx-auto -mt-6 mb-1.5 grid place-items-center w-14 h-14 rounded-full bg-coral text-white shadow-lg shadow-coral/30 active:scale-95 transition">
               <Icon name="camera" size={26} />
             </button>
           ))}
+          <button onClick={() => setMore(m => !m)} className={`flex flex-col items-center gap-0.5 pt-2.5 pb-2 text-[11px] font-medium ${more || inMore ? 'text-pine' : 'text-muted'}`}>
+            <Icon name="more" size={23} />More
+          </button>
         </div>
       </nav>
+
+      {/* "More" sheet — every other screen, one thumb-reach away */}
+      {more && (
+        <div className="md:hidden fixed inset-0 z-20 bg-black/40" onClick={() => setMore(false)}>
+          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-surface p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]" onClick={e => e.stopPropagation()}>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+            <div className="grid grid-cols-3 gap-2">
+              {MORE.map(n => (
+                <NavLink key={n.to} to={n.to} onClick={() => setMore(false)} className={({ isActive }) => `flex flex-col items-center gap-1.5 rounded-2xl py-4 text-xs font-medium ${isActive ? 'bg-pine/12 text-pine' : 'bg-surface-2 text-ink'}`}>
+                  <Icon name={n.icon} size={24} />{n.label}
+                </NavLink>
+              ))}
+              <button onClick={() => void signOut()} className="flex flex-col items-center gap-1.5 rounded-2xl py-4 text-xs font-medium bg-surface-2 text-muted"><Icon name="out" size={24} />Sign out</button>
+            </div>
+            <p className="text-center text-[11px] text-muted mt-3">{member?.display_name} · {member?.email}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

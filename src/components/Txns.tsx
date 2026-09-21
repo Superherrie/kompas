@@ -15,8 +15,8 @@ export function TxnRow({ t, onClick, onClaim }: { t: Txn; onClick?: () => void; 
       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: t.color ?? 'var(--muted)' }} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{t.description}</span>
-        <span className="flex items-center gap-1.5 text-xs text-muted">
-          <span className="truncate">{t.sub_name ?? 'Uncategorised'} · {t.account}{t.txn_time ? ` · ${t.txn_time.slice(0, 5)}` : ''}</span>
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted">
+          <span className="truncate max-w-full">{t.sub_name ?? 'Uncategorised'} · {t.account}{t.txn_time ? ` · ${t.txn_time.slice(0, 5)}` : ''}</span>
           {t.status === 'pending' && <span className="chip !py-0 !text-[10px] !bg-gold/25 !text-ink">pending</span>}
           {t.claimable && <span className={`chip !py-0 !text-[10px] whitespace-nowrap ${t.repaid_on ? '' : '!bg-gold/25 !text-ink'}`}>{t.repaid_on ? 'repaid by work' : t.claimed_on ? 'claimed' : 'to claim'}</span>}
           {t.month !== t.cal_month && <span className="chip !py-0 !text-[10px] whitespace-nowrap">counts in {monthLabel(t.month, true)}</span>}
@@ -79,7 +79,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   useEffect(() => { const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [onClose])
   return (
     <div className="fixed inset-0 z-40 flex items-end md:items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-surface w-full md:max-w-lg rounded-t-3xl md:rounded-3xl p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-surface w-full md:max-w-lg rounded-t-3xl md:rounded-3xl p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] max-h-[92dvh] overflow-y-auto overscroll-contain" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4"><h2 className="display text-xl">{title}</h2><button onClick={onClose} className="p-1 text-muted"><Icon name="close" /></button></div>
         {children}
       </div>

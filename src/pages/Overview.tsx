@@ -44,8 +44,8 @@ export default function Overview() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="display text-3xl md:text-4xl">Overview</h1>
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-full bg-surface-2 p-1 text-sm">
+        <div className="flex items-center gap-2 max-w-full">
+          <div className="inline-flex rounded-full bg-surface-2 p-1 text-sm whitespace-nowrap">
             {RANGES.map(r => <button key={r.n} onClick={() => setRange(r.n)} className={`px-3 py-1 rounded-full font-medium ${range === r.n ? 'bg-surface shadow-sm' : 'text-muted'}`}>{r.label}</button>)}
           </div>
           <button onClick={() => setTable(t => !t)} className="btn btn-ghost !py-1.5 !text-xs">{table ? 'Charts' : 'Table'}</button>

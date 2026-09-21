@@ -73,8 +73,8 @@ export default function Claims({ version, onChanged }: { version: unknown; onCha
       )}
       <div className="divide-y divide-line">
         {list.map(c => (
-          <div key={`${c.txn_id}-${c.slip_id}`} className="flex items-center gap-2 py-2">
-            <span className="flex-1 min-w-0">
+          <div key={`${c.txn_id}-${c.slip_id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2">
+            <span className="flex-1 min-w-[55%]">
               <span className="block truncate text-sm font-medium">{c.description}{c.slip_id && <Icon name="receipt" size={13} className="inline ml-1.5 text-muted" />}</span>
               <span className="text-xs text-muted">{dayLabel(c.claim_date)}{c.claimed_on ? ` · claimed ${dayLabel(c.claimed_on)}` : ''}</span>
             </span>

@@ -15,8 +15,8 @@ export function Card({ title, sub, right, children, className = '' }: { title?: 
   return (
     <section className={`card p-5 ${className}`}>
       {(title || right) && (
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div>{title && <h2 className="display text-lg leading-tight">{title}</h2>}{sub && <p className="text-xs text-muted mt-0.5">{sub}</p>}</div>
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 mb-4">
+          <div className="min-w-0">{title && <h2 className="display text-lg leading-tight">{title}</h2>}{sub && <p className="text-xs text-muted mt-0.5">{sub}</p>}</div>
           {right}
         </div>
       )}

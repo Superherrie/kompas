@@ -180,7 +180,7 @@ function ManualRecon({ payments, items, onSettled }: { payments: Txn[]; items: T
         </div>
       </div>
 
-      <div className="sticky bottom-20 md:bottom-4 mt-4 rounded-2xl border border-line bg-surface shadow-lg p-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div className="sticky bottom-[calc(5.25rem+env(safe-area-inset-bottom))] md:bottom-4 z-10 mt-4 rounded-2xl border border-line bg-surface shadow-lg p-3 flex flex-wrap items-center gap-x-6 gap-y-2">
         <Figure label="Reimbursement" value={payment ? money(payment.amount) : '—'} />
         <Figure label={`Expenses ticked (${chosen.length})`} value={chosen.length ? money(cost) : '—'} />
         <Figure label="Difference" value={payment && chosen.length ? `${diff < 0 ? '−' : diff > 0 ? '+' : ''}${money(diff)}` : '—'}
