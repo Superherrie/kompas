@@ -66,6 +66,8 @@ export default function ClaimsRecon() {
         <Tile label="Reimbursed since the start date" value={rand(repaid12)} hint={`${data?.settled.length ?? 0} payments in total`} />
       </div>
 
+      <ManualRecon payments={data?.unmatched ?? []} items={open} onSettled={changed} />
+
       <Claims version={tick} onChanged={changed} />
       {open.length === 0 && <Card><p className="text-sm text-muted">Nothing outstanding — every claimable item has been reimbursed.</p></Card>}
 
@@ -76,18 +78,6 @@ export default function ClaimsRecon() {
           </div>
         </Card>
       )}
-
-      <Card title="Company payments not matched yet" sub="Money in from the company that hasn’t been tied to claimable items. Usually the payment also covers expenses you haven’t ticked “claim” yet — tick them, then press Match company payments.">
-        {!data?.unmatched.length && <p className="text-sm text-muted">None.</p>}
-        <div className="divide-y divide-line">
-          {data?.unmatched.map(p => (
-            <div key={p.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-              <span className="min-w-0"><span className="block truncate font-medium">{p.description}</span><span className="text-xs text-muted">{dayLabel(p.txn_date)} · {p.account} · {p.sub_name}</span></span>
-              <span className="num font-semibold text-good whitespace-nowrap">+{rand(p.amount)}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
 
       <Card title="Settled" sub="Each company payment with the items it paid back. The difference is the exchange rate on foreign-currency items.">
         {!data?.settled.length && <p className="text-sm text-muted">Nothing settled yet.</p>}
@@ -130,4 +120,73 @@ function StartDate({ value, onSaved }: { value?: string; onSaved: () => void }) 
       <span>— older items keep their “claim” tick (still outside your spending) but are ignored here.</span>
     </p>
   )
+}
+
+/** Recon by hand: tick one reimbursement, tick the open expenses it paid for, watch the difference, settle. */
+function ManualRecon({ payments, items, onSettled }: { payments: Txn[]; items: Txn[]; onSettled: () => void }) {
+  const [pay, setPay] = useState<number>(); const [picked, setPicked] = useState<Set<number>>(new Set()); const [busy, setBusy] = useState(false)
+  const payment = payments.find(x => x.id === pay)
+  const chosen = items.filter(i => picked.has(i.id))
+  const cost = -chosen.reduce((t, i) => t + i.amount, 0)
+  const diff = (payment?.amount ?? 0) - cost
+  const toggle = (id: number) => setPicked(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const money = (n: number) => `R ${Math.abs(n).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/,/g, '.').replace(/\u00a0|\s/g, ' ')}`   // a recon needs the cents
+
+  async function settle() {
+    if (!payment || !chosen.length) return
+    if (Math.abs(diff) >= 1 && !confirm(`The items differ from the payment by ${money(diff)}. Settle anyway? (Normal when an item was billed in dollars.)`)) return
+    setBusy(true)
+    await supabase.rpc('pf_settle_claims', { p_payment: payment.id, p_items: chosen.map(i => i.id) })
+    setBusy(false); setPay(undefined); setPicked(new Set()); onSettled()
+  }
+
+  if (!payments.length && !items.length) return null
+  return (
+    <Card title="Reconcile a reimbursement" sub="Tick the payment you received, then tick the expenses it paid back. The difference updates as you go.">
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">1 · Reimbursement received</p>
+          {!payments.length && <p className="text-sm text-muted py-2">No unmatched company payments since the start date.</p>}
+          <div className="divide-y divide-line">
+            {payments.map(x => (
+              <label key={x.id} className={`flex items-center gap-3 py-2 cursor-pointer ${pay === x.id ? 'bg-pine/10 -mx-2 px-2 rounded-xl' : ''}`}>
+                <input type="radio" name="recon-payment" className="w-5 h-5 accent-[var(--pine)]" checked={pay === x.id} onChange={() => setPay(x.id)} />
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{x.description}</span><span className="text-xs text-muted">{dayLabel(x.txn_date)} · {x.account}</span></span>
+                <span className="num text-sm font-semibold text-good whitespace-nowrap">+{money(x.amount)}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">2 · Expenses it paid back</p>
+            {items.length > 0 && <button className="text-xs underline text-muted" onClick={() => setPicked(picked.size === items.length ? new Set() : new Set(items.map(i => i.id)))}>{picked.size === items.length ? 'Clear' : 'Tick all'}</button>}
+          </div>
+          {!items.length && <p className="text-sm text-muted py-2">No open claimable expenses. Tick “claim” on a transaction first.</p>}
+          <div className="divide-y divide-line">
+            {items.map(i => (
+              <label key={i.id} className={`flex items-center gap-3 py-2 cursor-pointer ${picked.has(i.id) ? 'bg-pine/10 -mx-2 px-2 rounded-xl' : ''}`}>
+                <input type="checkbox" className="w-5 h-5 accent-[var(--pine)]" checked={picked.has(i.id)} onChange={() => toggle(i.id)} />
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{i.description}</span><span className="text-xs text-muted">{dayLabel(i.txn_date)} · {i.account}</span></span>
+                <span className="num text-sm font-semibold whitespace-nowrap">{money(i.amount)}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="sticky bottom-20 md:bottom-4 mt-4 rounded-2xl border border-line bg-surface shadow-lg p-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <Figure label="Reimbursement" value={payment ? money(payment.amount) : '—'} />
+        <Figure label={`Expenses ticked (${chosen.length})`} value={chosen.length ? money(cost) : '—'} />
+        <Figure label="Difference" value={payment && chosen.length ? `${diff < 0 ? '−' : diff > 0 ? '+' : ''}${money(diff)}` : '—'}
+          tone={!payment || !chosen.length ? undefined : Math.abs(diff) < 1 ? 'good' : 'bad'}
+          hint={!payment || !chosen.length ? undefined : Math.abs(diff) < 1 ? 'balances' : diff < 0 ? 'paid back less than the expenses' : 'paid back more than the expenses'} />
+        <button className="btn btn-primary ml-auto" disabled={!payment || !chosen.length || busy} onClick={() => void settle()}>{busy ? 'Settling…' : 'Settle these'}</button>
+      </div>
+    </Card>
+  )
+}
+
+function Figure({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'good' | 'bad' }) {
+  return <div><p className="text-[11px] text-muted">{label}</p><p className={`num font-semibold text-lg leading-tight ${tone === 'good' ? 'text-good' : tone === 'bad' ? 'text-bad' : ''}`}>{value}</p>{hint && <p className="text-[11px] text-muted">{hint}</p>}</div>
 }
