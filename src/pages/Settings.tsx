@@ -96,19 +96,22 @@ function Household({ isOwner }: { isOwner: boolean }) {
   )
 }
 
+const READERS = [
+  { v: 'device', title: 'On this device · free', text: 'Read on your phone, nothing sent anywhere. You confirm the shop, total and date before saving.' },
+  { v: 'claude', title: 'Claude · about 50c (ZAR) a slip', text: 'Much better on crumpled or faded slips and line items. Needs ANTHROPIC_API_KEY set on the Supabase project.' },
+]
+
 function SlipReader() {
   const { data: reader, reload } = useLoad(() => getSetting('slip_reader'), [])
   const set = async (v: string) => { await setSetting('slip_reader', v); void reload() }
-  const Opt = ({ v, title, text }: { v: string; title: string; text: string }) => (
-    <button onClick={() => void set(v)} className={`text-left rounded-2xl border p-3 ${(reader ?? 'device') === v ? 'border-pine bg-pine/10' : 'border-line'}`}>
-      <p className="font-semibold text-sm">{title}</p><p className="text-xs text-muted mt-0.5">{text}</p>
-    </button>
-  )
   return (
     <Card title="Slip reader" sub="How a photographed slip is turned into shop, total and items.">
       <div className="grid sm:grid-cols-2 gap-3">
-        <Opt v="device" title="On this device · free" text="Read on your phone, nothing sent anywhere. You confirm the shop, total and date before saving." />
-        <Opt v="claude" title="Claude · about 50c (ZAR) a slip" text="Much better on crumpled or faded slips and line items. Needs ANTHROPIC_API_KEY set on the Supabase project." />
+        {READERS.map(r => (
+          <button key={r.v} onClick={() => void set(r.v)} className={`text-left rounded-2xl border p-3 ${(reader ?? 'device') === r.v ? 'border-pine bg-pine/10' : 'border-line'}`}>
+            <p className="font-semibold text-sm">{r.title}</p><p className="text-xs text-muted mt-0.5">{r.text}</p>
+          </button>
+        ))}
       </div>
     </Card>
   )
