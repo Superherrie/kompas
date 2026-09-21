@@ -10,7 +10,7 @@ import { TxnList } from '../components/Txns'
 
 export default function Today() {
   const { member } = useAuth()
-  const { monthly, categories, budget, reload: reloadFinance } = useFinance()
+  const { monthly, categories, budget, budgetFor, reload: reloadFinance } = useFinance()
   const month = thisMonth(), prev = addMonths(month, -1)
   const dim = daysInMonth(month), dayNo = +today().slice(8, 10), daysLeft = dim - dayNo + 1
 
@@ -39,16 +39,16 @@ export default function Today() {
   // where it is going: this month's discretionary sub-categories against their usual (avg of the previous 6 months)
   const leaks = useMemo(() => {
     const usualMonths = Array.from({ length: 6 }, (_, i) => addMonths(month, -1 - i))
-    const m = new Map<number, { id: number; name: string; cat: string; now: number; usual: number }>()
+    const m = new Map<number, { id: number; name: string; now: number; usual: number; budget?: number }>()
     for (const r of monthly) {
       if (r.kind !== 'expense' || !r.discretionary) continue
-      const e = m.get(r.sub_id) ?? { id: r.sub_id, name: r.sub_name, cat: r.cat_name, now: 0, usual: 0 }
+      const e = m.get(r.cat_id) ?? { id: r.cat_id, name: r.cat_name, now: 0, usual: 0, budget: budgetFor(r.cat_id, month) }
       if (r.month === month) e.now -= r.total; else if (usualMonths.includes(r.month)) e.usual -= r.total / 6
-      m.set(r.sub_id, e)
+      m.set(r.cat_id, e)
     }
-    return [...m.values()].filter(e => e.now > 0).sort((a, b) => b.now - a.now).slice(0, 7)
-  }, [monthly, month])
-  const leakMax = Math.max(1, ...leaks.map(l => Math.max(l.now, l.usual)))
+    return [...m.values()].filter(e => e.now > 0 || (e.budget ?? 0) > 0).sort((a, b) => b.now - a.now).slice(0, 8)
+  }, [monthly, month, budgetFor])
+  const leakMax = Math.max(1, ...leaks.map(l => Math.max(l.now, l.budget ?? l.usual)))
 
   const hour = new Date().getHours()
   return (
@@ -95,16 +95,16 @@ export default function Today() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-5">
-        <Card className="lg:col-span-2" title="Where it’s going" sub="This month vs your usual month (tick = 6-month average)">
+        <Card className="lg:col-span-2" title="Where it’s going" sub="Discretionary categories against this month’s budget (tick = budget)">
           {leaks.length === 0 && <p className="text-sm text-muted">No discretionary spend yet this month.</p>}
           <div className="space-y-3.5">
             {leaks.map(l => (
-              <Link key={l.id} to={`/categories/sub/${l.id}?m=${month}`} className="block group">
+              <Link key={l.id} to={`/categories/cat/${l.id}?m=${month}`} className="block group">
                 <div className="flex justify-between text-sm mb-1">
                   <span className="font-medium group-hover:text-pine">{l.name}</span>
-                  <span className="num"><span className="font-semibold">{rand0(l.now)}</span>{l.usual > 0 && <span className={`ml-2 text-xs ${l.now > l.usual ? 'text-bad' : 'text-muted'}`}>{l.now > l.usual ? '▲' : '▽'} usual {rand0(l.usual)}</span>}</span>
+                  <span className="num"><span className="font-semibold">{rand0(l.now)}</span>{l.budget !== undefined ? <span className={`ml-2 text-xs ${l.now > l.budget ? 'text-bad font-semibold' : 'text-muted'}`}>{l.now > l.budget ? `▲ ${rand0(l.now - l.budget)} over` : `of ${rand0(l.budget)}`}</span> : l.usual > 0 && <span className="ml-2 text-xs text-muted">usual {rand0(l.usual)}</span>}</span>
                 </div>
-                <Bar value={l.now} max={leakMax} mark={l.usual || undefined} />
+                <Bar value={l.now} max={leakMax} mark={l.budget ?? (l.usual || undefined)} color={l.budget !== undefined && l.now > l.budget ? 'var(--bad)' : undefined} />
               </Link>
             ))}
           </div>

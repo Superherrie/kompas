@@ -29,7 +29,7 @@ type Scope = 'all' | 'disc' | 'fixed'
 
 /** Level 1: categories for a month → expand to sub-categories → click through to the transactions. */
 export default function Categories() {
-  const { monthly } = useFinance()
+  const { monthly, budgetFor } = useFinance()
   const [month, setMonth] = useMonthParam()
   const [scope, setScope] = useState<Scope>('all')
   // the expanded category lives in the URL (?c=) so Back from a detail page lands on the same open list
@@ -54,7 +54,8 @@ export default function Categories() {
     const cats = [...m.values()].filter(c => c.now > 0 || c.usual > 0).sort((a, b) => b.now - a.now)
     return { cats, total: cats.reduce((s, c) => s + c.now, 0), income }
   }, [monthly, month, scope])
-  const max = Math.max(1, ...cats.map(c => Math.max(c.now, c.usual)))
+  const max = Math.max(1, ...cats.map(c => Math.max(c.now, budgetFor(c.id, month) ?? c.usual)))
+  const budgetTotal = cats.reduce((s, c) => s + (budgetFor(c.id, month) ?? 0), 0)
 
   return (
     <div className="space-y-5">
@@ -67,20 +68,20 @@ export default function Categories() {
           {([['all', 'Everything'], ['disc', 'Discretionary'], ['fixed', 'Fixed & essential']] as [Scope, string][]).map(([k, l]) =>
             <button key={k} onClick={() => setScope(k)} className={`px-3 py-1 rounded-full font-medium ${scope === k ? 'bg-surface shadow-sm' : 'text-muted'}`}>{l}</button>)}
         </div>
-        <p className="text-sm text-muted">Spent <span className="num font-semibold text-ink">{rand0(total)}</span>{scope === 'all' && income > 0 && <> · income <span className="num font-semibold text-ink">{rand0(income)}</span></>}</p>
+        <p className="text-sm text-muted">Spent <span className={`num font-semibold ${budgetTotal && total > budgetTotal ? 'text-bad' : 'text-ink'}`}>{rand0(total)}</span>{budgetTotal > 0 && <> of <span className="num font-semibold text-ink">{rand0(budgetTotal)}</span> budget</>}{scope === 'all' && income > 0 && <> · income <span className="num font-semibold text-ink">{rand0(income)}</span></>}</p>
       </div>
 
       <Card>
         {cats.length === 0 && <p className="text-sm text-muted">Nothing recorded for {monthLabel(month)}.</p>}
         <div className="divide-y divide-line">
-          {cats.map(c => (
+          {cats.map(c => { const b = budgetFor(c.id, month); const over = b !== undefined && c.now > b; return (
             <div key={c.id} className="py-3">
               <button className="w-full text-left" onClick={() => setOpen(open === c.id ? undefined : c.id)}>
                 <div className="flex items-center justify-between gap-3 mb-1.5">
                   <span className="flex items-center gap-2 font-medium"><span className="w-2.5 h-2.5 rounded-full" style={{ background: c.color ?? 'var(--muted)' }} />{c.name}<Icon name="right" size={14} className={`text-muted transition ${open === c.id ? 'rotate-90' : ''}`} /></span>
-                  <span className="num text-sm"><span className="font-semibold">{rand0(c.now)}</span><span className="text-muted ml-2 hidden sm:inline">{total ? Math.round((c.now / total) * 100) : 0}%</span></span>
+                  <span className="num text-sm"><span className={`font-semibold ${over ? 'text-bad' : ''}`}>{over ? '▲ ' : ''}{rand0(c.now)}</span>{b !== undefined && <span className="text-muted ml-1.5">/ {rand0(b)}</span>}</span>
                 </div>
-                <Bar value={c.now} max={max} mark={c.usual || undefined} color={c.color ?? undefined} />
+                <Bar value={c.now} max={max} mark={b ?? (c.usual || undefined)} color={c.color ?? undefined} />
               </button>
               {open === c.id && (
                 <div className="mt-3 ml-4 space-y-1">
@@ -94,9 +95,9 @@ export default function Categories() {
                 </div>
               )}
             </div>
-          ))}
+          ) })}
         </div>
-        <p className="text-xs text-muted mt-3">The tick on each bar is your average over the previous six months.</p>
+        <p className="text-xs text-muted mt-3">The tick on each bar is the month’s budget (or, where there is none, your six-month average).</p>
       </Card>
     </div>
   )
