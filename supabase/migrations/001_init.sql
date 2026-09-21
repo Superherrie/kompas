@@ -141,10 +141,13 @@ begin
   return r;
 end $$;
 
-create or replace function pf_uncategorised_id() returns int
-language sql stable security definer set search_path = public as
-$$ select c.id from pf_categories c join pf_categories p on p.id = c.parent_id
-    where p.name = 'Uncategorised' and c.name = 'Uncategorised' limit 1 $$;
+-- fallback bucket: unrecognised money OUT → Uncategorised (expense); unrecognised money IN → Income > Uncategorised income
+-- (a credit parked in an expense bucket would silently net off spending)
+create or replace function pf_uncategorised_id(p_amount numeric default -1) returns int
+language sql stable security definer set search_path = public as $$
+  select c.id from pf_categories c join pf_categories p on p.id = c.parent_id
+   where (p_amount > 0 and p.name = 'Income' and c.name = 'Uncategorised income')
+      or (not p_amount > 0 and p.name = 'Uncategorised' and c.name = 'Uncategorised') limit 1 $$;
 
 -- ---------------------------------------------------------------- import
 -- p_rows: [{date, time?, description, amount, balance?, ref?}]
@@ -191,7 +194,7 @@ begin
       if hit is not null then
         update pf_transactions x set status = 'cleared', description = ds,
                txn_time = coalesce(x.txn_time, t),
-               category_id = case when x.category_locked or x.category_id is distinct from pf_uncategorised_id()
+               category_id = case when x.category_locked or x.category_id is distinct from pf_uncategorised_id(a)
                                   then x.category_id else coalesce(pf_categorise(ds, acc), x.category_id) end
          where id = hit;
         cleared := cleared + 1; continue;
@@ -211,7 +214,7 @@ begin
       end if;
     end if;
 
-    cat := coalesce(pf_categorise(ds, acc), nullif(r->>'category_id','')::int, pf_uncategorised_id());
+    cat := coalesce(pf_categorise(ds, acc), nullif(r->>'category_id','')::int, pf_uncategorised_id(a));
     insert into pf_transactions (account_id, txn_date, txn_time, description, amount, category_id, source, source_ref, status, balance_after)
     values (acc, d, t, ds, a, cat, p_source, r->>'ref',
             case when p_source = 'statement' then 'cleared' else 'pending' end,

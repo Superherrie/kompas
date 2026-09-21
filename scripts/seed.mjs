@@ -50,7 +50,7 @@ const pairs = new Map();   // 'Cat > Sub' -> {cat, sub, kind}
 const add = (cat, sub, kind = 'expense') => pairs.set(`${cat} > ${sub}`, { cat, sub, kind });
 for (const t of data.transactions) add(t.Category, t.SubCategory, t.Category === 'Income' ? 'income' : 'expense');
 for (const v of Object.values(catmap)) if (Array.isArray(v) && v[0] && v[1]) add(v[0], v[1], v[0] === 'Income' ? 'income' : 'expense');
-add('Uncategorised', 'Uncategorised'); add('Transfers', 'Between own accounts', 'transfer'); add('Transfers', 'Savings pockets', 'transfer');
+add('Uncategorised', 'Uncategorised'); add('Income', 'Uncategorised income', 'income'); add('Transfers', 'Between own accounts', 'transfer'); add('Transfers', 'Savings pockets', 'transfer');
 const cats = [...new Set([...pairs.values()].map(p => p.cat))].sort();
 console.log(`${cats.length} categories, ${pairs.size} sub-categories, ${data.transactions.length} transactions`);
 console.log('discretionary:', [...pairs.values()].filter(p => p.kind === 'expense' && isDisc(p.cat, p.sub)).map(p => `${p.cat} > ${p.sub}`).join('; '));
