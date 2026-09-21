@@ -38,7 +38,9 @@ Deno.serve(async (req) => {
     if (!byToken && !(await asUser.rpc("pf_is_member")).data) return json({ error: "not a household member" }, 403);
     if (!Deno.env.get("ANTHROPIC_API_KEY")) return json({ error: "No ANTHROPIC_API_KEY yet — add it in Supabase → Edge Functions → Secrets", code: "no_key" }, 503);
 
-    const { image, media } = await req.json();
+    const { image, media, path } = await req.json();
+    // an app build from before 21 Sep 2026 sends { path } — it is simply out of date
+    if (!image && path) return json({ error: "Kompas has been updated — close the app completely and open it again, then rescan." }, 409);
     if (typeof image !== "string" || image.length < 1000) return json({ error: "image (base64) required" }, 400);
     const mediaType = (["image/png", "image/webp"].includes(media) ? media : "image/jpeg") as "image/jpeg" | "image/png" | "image/webp";
 

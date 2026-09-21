@@ -85,6 +85,8 @@ export default function Slips() {
       <h1 className="display text-3xl md:text-4xl">Slips</h1>
       <input ref={input} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => void onFile(e.target.files?.[0])} />
 
+      {/* data-busy: the auto-updater must not reload the page while a slip is being read or checked */}
+      <div data-busy={stage.step === 'working' || stage.step === 'review' ? '' : undefined} />
       <Card className="text-center">
         {stage.step === 'idle' && (
           <div className="py-6">
