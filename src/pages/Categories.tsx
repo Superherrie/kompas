@@ -7,6 +7,7 @@ import { addMonths, monthLabel, rand, rand0, randK, thisMonth } from '../lib/for
 import { AXIS, Bar, Card, GRID, Tip } from '../components/Charts'
 import { TxnList } from '../components/Txns'
 import Icon from '../components/Icon'
+import { byVendor, vendorOf } from '../lib/vendor'
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function useMonthParam() {
@@ -119,11 +120,17 @@ export function CategoryDetail() {
   })), [monthly, months, cid, isSub])
   const { data: txns, reload } = useLoad(() => getTxns({ month, ...(isSub ? { subId: cid } : { catId: cid }) }), [month, cid, isSub])
   const total = (txns ?? []).reduce((s, t) => s + t.amount, 0)
-  const merchants = useMemo(() => {
-    const m = new Map<string, { n: number; v: number }>()
-    for (const t of txns ?? []) { const k = t.description.replace(/\s+(ZA|\S*\d{4,}\S*)\b.*$/i, '').trim(); const e = m.get(k) ?? { n: 0, v: 0 }; e.n++; e.v += t.amount; m.set(k, e) }
-    return [...m].sort((a, b) => a[1].v - b[1].v).slice(0, 5)
-  }, [txns])
+
+  // by vendor: this month, or the 6 / 12 accounting months ending with it
+  const [span, setSpan] = useState(1); const [vendor, setVendor] = useState<string>(); const [allVendors, setAllVendors] = useState(false)
+  const spanMonths = useMemo(() => Array.from({ length: span }, (_, i) => addMonths(month, -i)), [month, span])
+  const { data: spanTxns, reload: reloadSpan } = useLoad(
+    () => span === 1 ? Promise.resolve(undefined) : getTxns({ months: spanMonths, ...(isSub ? { subId: cid } : { catId: cid }) }), [spanMonths.join(), cid, isSub])
+  const pool = useMemo(() => (span === 1 ? txns : spanTxns) ?? [], [span, txns, spanTxns])
+  const vendors = useMemo(() => byVendor(pool.filter(t => t.kind === 'expense')), [pool])
+  const vendorTotal = vendors.reduce((t, v) => t + v.total, 0), vendorMax = Math.max(1, ...vendors.map(v => v.total))
+  const shown = vendor ? pool.filter(t => vendorOf(t.description) === vendor) : txns ?? []
+  const refresh = () => { void reload(); void reloadSpan(); void reloadFinance() }
 
   return (
     <div className="space-y-5">
@@ -151,12 +158,31 @@ export function CategoryDetail() {
         <Card title={monthLabel(month)}>
           <p className="display text-4xl num">{rand(total)}</p>
           <p className="text-sm text-muted mb-4">{txns?.length ?? 0} transaction{txns?.length === 1 ? '' : 's'}</p>
-          {merchants.map(([k, v]) => <div key={k} className="flex justify-between text-sm py-1 border-t border-line"><span className="truncate pr-3">{k} <span className="text-muted">×{v.n}</span></span><span className="num font-medium">{rand0(v.v)}</span></div>)}
+          {vendors.slice(0, 5).map(v => <div key={v.vendor} className="flex justify-between text-sm py-1 border-t border-line"><span className="truncate pr-3">{v.vendor} <span className="text-muted">×{v.n}</span></span><span className="num font-medium">{rand0(v.total)}</span></div>)}
         </Card>
       </div>
 
-      <Card title="Transactions">
-        <TxnList txns={txns ?? []} categories={categories} onChanged={() => { void reload(); void reloadFinance() }} />
+      <Card title="By vendor" sub="Where the money in this category goes — tap a vendor to see its transactions"
+        right={<div className="inline-flex rounded-full bg-surface-2 p-1 text-xs">{([[1, 'Month'], [6, '6 months'], [12, '12 months']] as [number, string][]).map(([n, l]) =>
+          <button key={n} onClick={() => { setSpan(n); setVendor(undefined) }} className={`px-2.5 py-1 rounded-full font-medium ${span === n ? 'bg-surface shadow-sm' : 'text-muted'}`}>{l}</button>)}</div>}>
+        {vendors.length === 0 && <p className="text-sm text-muted">Nothing spent here {span === 1 ? `in ${monthLabel(month)}` : `in these ${span} months`}.</p>}
+        <div className="divide-y divide-line">
+          {(allVendors ? vendors : vendors.slice(0, 12)).map(v => (
+            <button key={v.vendor} onClick={() => setVendor(vendor === v.vendor ? undefined : v.vendor)} className={`w-full text-left py-2.5 ${vendor === v.vendor ? 'bg-pine/10 -mx-2 px-2 rounded-xl' : ''}`}>
+              <div className="flex items-baseline justify-between gap-3 mb-1">
+                <span className="text-sm font-medium truncate">{v.vendor}</span>
+                <span className="num text-sm whitespace-nowrap"><span className="text-xs text-muted mr-2">{v.n}× · {rand0(v.total / v.n)} avg{span > 1 ? ` · ${rand0(v.total / span)}/mo` : ''}</span><span className="font-semibold">{rand0(v.total)}</span><span className="text-xs text-muted ml-1.5 inline-block w-8 text-right">{Math.round((v.total / Math.max(1, vendorTotal)) * 100)}%</span></span>
+              </div>
+              <Bar value={v.total} max={vendorMax} color={me?.color ?? parent?.color ?? undefined} />
+            </button>
+          ))}
+        </div>
+        {vendors.length > 12 && <button className="text-sm font-semibold text-pine mt-3" onClick={() => setAllVendors(a => !a)}>{allVendors ? 'Show top 12' : `Show all ${vendors.length} vendors`}</button>}
+      </Card>
+
+      <Card title={vendor ? `${vendor} — ${shown.length} transaction${shown.length === 1 ? '' : 's'}` : 'Transactions'} sub={vendor ? (span === 1 ? monthLabel(month) : `${monthLabel(spanMonths[span - 1])} – ${monthLabel(month)}`) : undefined}
+        right={vendor ? <button className="btn btn-ghost !py-1.5 !text-xs" onClick={() => setVendor(undefined)}>Show all</button> : undefined}>
+        <TxnList txns={shown} categories={categories} onChanged={refresh} />
       </Card>
     </div>
   )
