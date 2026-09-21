@@ -59,6 +59,8 @@ export default function Settings() {
         </div>
       </Card>
 
+      <MonthEnd onChanged={() => void reload()} />
+
       <SlipReader />
 
       <Household isOwner={member?.role === 'owner'} />
@@ -113,6 +115,28 @@ function SlipReader() {
           </button>
         ))}
       </div>
+    </Card>
+  )
+}
+
+function MonthEnd({ onChanged }: { onChanged: () => void }) {
+  const { data: day, reload } = useLoad(() => getSetting('month_end_cutoff_day'), [])
+  const [draft, setDraft] = useState<string>(); const [msg, setMsg] = useState<string>()
+  async function save() {
+    const d = Math.max(0, Math.min(31, +(draft ?? 0)))
+    await setSetting('month_end_cutoff_day', String(d || 99))                     // 99 = never reached → rule off
+    const { data } = await supabase.rpc('pf_assign_periods')
+    setMsg(`${data ?? 0} transactions moved.`); setDraft(undefined); void reload(); onChanged()
+  }
+  return (
+    <Card title="Month-end payments" sub="Salary and the payments that go off FNB with it (alimony, bond, phones…) are next month’s money. FNB transactions from this day of the month onward count in the following month — or from payday, when the salary lands earlier (December). Discovery card spend always stays on its own date. Any single transaction can be changed by hand under “Counts in”.">
+      <div className="flex gap-2 items-center text-sm">
+        <span>From the</span>
+        <input className="input !w-20 num text-center" inputMode="numeric" value={draft ?? (day === '99' ? '' : day ?? '27')} onChange={e => setDraft(e.target.value.replace(/[^d]/g, ''))} placeholder="off" />
+        <span>th</span>
+        <button className="btn btn-primary ml-2" disabled={draft === undefined} onClick={() => void save()}>Save</button>
+      </div>
+      {msg && <p className="text-sm text-muted mt-2">{msg}</p>}
     </Card>
   )
 }

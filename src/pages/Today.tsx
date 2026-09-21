@@ -17,7 +17,7 @@ export default function Today() {
   // discretionary lines for this month and last (pace chart), plus the latest activity on any account
   const { data, reload } = useLoad(async () => {
     const [disc, recent] = await Promise.all([
-      getTxns({ from: `${prev}-01`, to: `${month}-${dim}`, discretionary: true }),
+      getTxns({ months: [prev, month], discretionary: true }),
       getTxns({ limit: 12 }),
     ])
     return { disc, recent }
@@ -31,7 +31,7 @@ export default function Today() {
   const spentToday = -(data?.disc ?? []).filter(t => t.txn_date === today()).reduce((s, t) => s + t.amount, 0)
 
   const pace = useMemo(() => {
-    const cum = (m: string) => { const a = Array(32).fill(0); for (const t of data?.disc ?? []) if (t.month === m) a[+t.txn_date.slice(8, 10)] -= t.amount; for (let i = 1; i < 32; i++) a[i] += a[i - 1]; return a }
+    const cum = (m: string) => { const a = Array(32).fill(0); for (const t of data?.disc ?? []) if (t.month === m) a[t.cal_month === m ? +t.txn_date.slice(8, 10) : 1] -= t.amount; for (let i = 1; i < 32; i++) a[i] += a[i - 1]; return a }
     const a = cum(month), b = cum(prev)
     return Array.from({ length: dim }, (_, i) => ({ day: i + 1, now: i + 1 <= dayNo ? Math.round(a[i + 1]) : undefined, last: Math.round(b[Math.min(i + 1, 31)]), plan: Math.round((budget / dim) * (i + 1)) }))
   }, [data, month, prev, dim, dayNo, budget])

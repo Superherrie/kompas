@@ -222,6 +222,9 @@ begin
     ins := ins + 1;
   end loop;
 
+  -- month-end FNB lines belong to next month's accounts (006_accounting_month.sql)
+  perform pf_assign_periods((current_date - 200)::date);
+
   -- new bank lines may be the payment an earlier, still unmatched slip was waiting for
   perform pf_match_slip(sl.id) from pf_slips sl where sl.status = 'unmatched' and sl.created_at > now() - interval '180 days';
 
@@ -263,7 +266,10 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- reporting view
-create or replace view pf_v_txns with (security_invoker = true) as
+-- (re-runnable: once 006_accounting_month.sql has widened pf_v_txns, leave the views alone)
+do $views$ begin
+  if not exists (select 1 from information_schema.columns where table_name = 'pf_transactions' and column_name = 'period') then
+    execute $v$create or replace view pf_v_txns with (security_invoker = true) as
 select t.id, t.txn_date, t.txn_time, to_char(t.txn_date, 'YYYY-MM') as month, t.description, t.amount,
        t.source, t.status, t.slip_id, t.note, t.balance_after, t.category_locked,
        a.id as account_id, a.name as account,
@@ -273,13 +279,16 @@ select t.id, t.txn_date, t.txn_time, to_char(t.txn_date, 'YYYY-MM') as month, t.
   from pf_transactions t
   join pf_accounts a on a.id = t.account_id
   left join pf_categories s on s.id = t.category_id
-  left join pf_categories c on c.id = s.parent_id;
+  left join pf_categories c on c.id = s.parent_id$v$;
+    execute $v$
 
 -- monthly totals per sub-category (keeps dashboards off the raw table)
 create or replace view pf_v_monthly with (security_invoker = true) as
 select month, cat_id, cat_name, sub_id, sub_name, kind, discretionary, color, account,
        sum(amount) as total, count(*) as n
-  from pf_v_txns group by 1,2,3,4,5,6,7,8,9;
+  from pf_v_txns group by 1,2,3,4,5,6,7,8,9$v$;
+  end if;
+end $views$;
 
 -- ---------------------------------------------------------------- RLS
 do $$ declare t text; begin

@@ -18,10 +18,12 @@ export const getMonthly = () =>
   fetchAll<Monthly>(() => supabase.from('pf_v_monthly').select('*').order('month').order('sub_id').order('account'))
     .then(rows => rows.map(r => ({ ...r, total: +r.total })))
 
-export interface TxnFilter { from?: string; to?: string; catId?: number; subId?: number; account?: string; search?: string; discretionary?: boolean; status?: string; limit?: number }
+export interface TxnFilter { /** accounting month(s) */ month?: string; months?: string[]; from?: string; to?: string; catId?: number; subId?: number; account?: string; search?: string; discretionary?: boolean; status?: string; limit?: number }
 export async function getTxns(f: TxnFilter): Promise<Txn[]> {
   const build = () => {
     let q = supabase.from('pf_v_txns').select('*')
+    if (f.month) q = q.eq('month', f.month)
+    if (f.months) q = q.in('month', f.months)
     if (f.from) q = q.gte('txn_date', f.from)
     if (f.to) q = q.lte('txn_date', f.to)
     if (f.catId) q = q.eq('cat_id', f.catId)

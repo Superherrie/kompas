@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { dayLabel, rand } from '../lib/format'
+import { addMonths, dayLabel, monthLabel, rand } from '../lib/format'
 import type { Category, Slip, Txn } from '../lib/types'
 import Icon from './Icon'
 
@@ -17,6 +17,7 @@ export function TxnRow({ t, onClick }: { t: Txn; onClick?: () => void }) {
         <span className="flex items-center gap-1.5 text-xs text-muted">
           <span className="truncate">{t.sub_name ?? 'Uncategorised'} · {t.account}{t.txn_time ? ` · ${t.txn_time.slice(0, 5)}` : ''}</span>
           {t.status === 'pending' && <span className="chip !py-0 !text-[10px] !bg-gold/25 !text-ink">pending</span>}
+          {t.month !== t.cal_month && <span className="chip !py-0 !text-[10px] whitespace-nowrap">counts in {monthLabel(t.month, true)}</span>}
           {t.slip_id && <Icon name="receipt" size={13} />}
         </span>
       </span>
@@ -80,6 +81,7 @@ function TxnSheet({ t, categories, onClose, onSaved }: { t: Txn; categories: Cat
   const [cat, setCat] = useState<number | null>(t.sub_id)
   const [remember, setRemember] = useState(true)
   const [note, setNote] = useState(t.note ?? '')
+  const [period, setPeriod] = useState(t.month)
   const [slip, setSlip] = useState<Slip>(); const [img, setImg] = useState<string>()
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string>()
 
@@ -94,6 +96,7 @@ function TxnSheet({ t, categories, onClose, onSaved }: { t: Txn; categories: Cat
   async function save() {
     setBusy(true); setError(undefined)
     if (cat && cat !== t.sub_id) { const { error } = await supabase.rpc('pf_set_category', { p_txn: t.id, p_category: cat, p_remember: remember }); if (error) { setError(error.message); setBusy(false); return } }
+    if (period !== t.month) await supabase.rpc('pf_set_period', { p_txn: t.id, p_period: period })
     if (note !== (t.note ?? '')) await supabase.from('pf_transactions').update({ note: note || null }).eq('id', t.id)
     onSaved()
   }
@@ -111,6 +114,11 @@ function TxnSheet({ t, categories, onClose, onSaved }: { t: Txn; categories: Cat
       <label className="block text-xs font-semibold text-muted mb-1">Category</label>
       <CategorySelect categories={categories} value={cat} onChange={setCat} />
       <label className="flex items-center gap-2 text-sm mt-2"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />Use this for every “{t.description.slice(0, 28)}”</label>
+      <label className="block text-xs font-semibold text-muted mt-4 mb-1">Counts in</label>
+      <select className="input" value={period} onChange={e => setPeriod(e.target.value)}>
+        {[-1, 0, 1].map(k => addMonths(t.cal_month, k)).map(m => <option key={m} value={m}>{monthLabel(m)}{m === t.cal_month ? ' (the month it was paid)' : ''}</option>)}
+        {t.period_locked && <option value="auto">Let the month-end rule decide</option>}
+      </select>
       <label className="block text-xs font-semibold text-muted mt-4 mb-1">Note</label>
       <input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="What was this for?" />
       {slip && (

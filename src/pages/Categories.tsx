@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Bar as RBar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useFinance } from '../context/FinanceContext'
 import { getTxns, useLoad } from '../lib/data'
-import { addMonths, daysInMonth, monthLabel, rand, rand0, randK, thisMonth } from '../lib/format'
+import { addMonths, monthLabel, rand, rand0, randK, thisMonth } from '../lib/format'
 import { AXIS, Bar, Card, GRID, Tip } from '../components/Charts'
 import { TxnList } from '../components/Txns'
 import Icon from '../components/Icon'
@@ -117,7 +117,7 @@ export function CategoryDetail() {
   const trend = useMemo(() => months.slice(-13).map(m => ({
     m, v: Math.round(-monthly.filter(r => r.month === m && (isSub ? r.sub_id : r.cat_id) === cid).reduce((s, r) => s + r.total, 0)),
   })), [monthly, months, cid, isSub])
-  const { data: txns, reload } = useLoad(() => getTxns({ from: `${month}-01`, to: `${month}-${daysInMonth(month)}`, ...(isSub ? { subId: cid } : { catId: cid }) }), [month, cid, isSub])
+  const { data: txns, reload } = useLoad(() => getTxns({ month, ...(isSub ? { subId: cid } : { catId: cid }) }), [month, cid, isSub])
   const total = (txns ?? []).reduce((s, t) => s + t.amount, 0)
   const merchants = useMemo(() => {
     const m = new Map<string, { n: number; v: number }>()

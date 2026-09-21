@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useFinance } from '../context/FinanceContext'
 import { getTxns, useLoad } from '../lib/data'
-import { daysInMonth, rand0, today } from '../lib/format'
+import { rand0, today } from '../lib/format'
 import { Card } from '../components/Charts'
 import { CategorySelect, Sheet, TxnList } from '../components/Txns'
 import { MonthNav, useMonthParam } from './Categories'
@@ -22,7 +22,7 @@ export default function Transactions() {
   const uncat = categories.find(c => c.name === 'Uncategorised' && c.parent_id !== null)?.id
   // a search looks across all months; otherwise stay inside the chosen month
   const { data: txns, reload } = useLoad(() => getTxns({
-    ...(q ? { search: q, limit: 300 } : { from: `${month}-01`, to: `${month}-${daysInMonth(month)}` }),
+    ...(q ? { search: q, limit: 300 } : { month }),
     ...(account ? { account } : {}), ...(filter === 'disc' ? { discretionary: true } : {}), ...(filter === 'pending' ? { status: 'pending' } : {}),
     ...(filter === 'uncat' && uncat ? { subId: uncat } : {}),
   }), [month, q, filter, account, uncat])

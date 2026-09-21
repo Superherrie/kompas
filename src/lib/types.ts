@@ -7,6 +7,8 @@ export interface Txn {
   account_id: number; account: string
   sub_id: number | null; sub_name: string | null; cat_id: number | null; cat_name: string | null
   kind: Kind; discretionary: boolean; color: string | null
+  /** month = accounting month (month-end FNB lines count in the next one); cal_month = the calendar month of txn_date */
+  cal_month: string; period_locked: boolean
 }
 export interface Monthly {
   month: string; cat_id: number; cat_name: string; sub_id: number; sub_name: string
