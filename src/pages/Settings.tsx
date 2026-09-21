@@ -1,0 +1,95 @@
+import { useMemo, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
+import { useFinance } from '../context/FinanceContext'
+import { setSetting, useLoad } from '../lib/data'
+import { addMonths, rand0, thisMonth } from '../lib/format'
+import { Card } from '../components/Charts'
+import type { Member } from '../lib/types'
+
+export default function Settings() {
+  const { member, signOut } = useAuth()
+  const { categories, monthly, budget, reload } = useFinance()
+  const [draft, setDraft] = useState<string>()
+  const [openCat, setOpenCat] = useState<number>()
+
+  // six-month average per sub-category, so the discretionary switch shows what it moves
+  const usual = useMemo(() => {
+    const months = Array.from({ length: 6 }, (_, i) => addMonths(thisMonth(), -1 - i)); const m = new Map<number, number>()
+    for (const r of monthly) if (r.kind === 'expense' && months.includes(r.month)) m.set(r.sub_id, (m.get(r.sub_id) ?? 0) - r.total / 6)
+    return m
+  }, [monthly])
+  const discUsual = categories.filter(c => c.discretionary).reduce((s, c) => s + (usual.get(c.id) ?? 0), 0)
+
+  async function saveBudget() { if (draft === undefined) return; await setSetting('discretionary_budget', String(Math.max(0, Math.round(+draft || 0)))); setDraft(undefined); void reload() }
+  async function toggle(id: number, discretionary: boolean) { await supabase.from('pf_categories').update({ discretionary }).eq('id', id); void reload() }
+
+  const parents = categories.filter(c => c.parent_id === null && c.kind === 'expense')
+  return (
+    <div className="space-y-5 max-w-3xl">
+      <h1 className="display text-3xl md:text-4xl">Settings</h1>
+
+      <Card title="Monthly discretionary budget" sub={`Your usual discretionary month is about ${rand0(discUsual)}.`}>
+        <div className="flex gap-2 items-center">
+          <span className="display text-2xl">R</span>
+          <input className="input !w-40 num text-lg" inputMode="numeric" value={draft ?? String(budget)} onChange={e => setDraft(e.target.value.replace(/[^\d]/g, ''))} />
+          <button className="btn btn-primary" disabled={draft === undefined} onClick={() => void saveBudget()}>Save</button>
+        </div>
+      </Card>
+
+      <Card title="What counts as discretionary" sub="Switch on the spending you can choose not to do. The Today screen tracks exactly these.">
+        <div className="divide-y divide-line">
+          {parents.map(p => {
+            const subs = categories.filter(c => c.parent_id === p.id); const on = subs.filter(s => s.discretionary).length
+            return (
+              <div key={p.id} className="py-2">
+                <button className="w-full flex items-center justify-between text-left py-1" onClick={() => setOpenCat(openCat === p.id ? undefined : p.id)}>
+                  <span className="flex items-center gap-2 font-medium"><span className="w-2.5 h-2.5 rounded-full" style={{ background: p.color ?? 'var(--muted)' }} />{p.name}</span>
+                  <span className="text-xs text-muted">{on ? `${on} of ${subs.length} discretionary` : 'fixed'}</span>
+                </button>
+                {openCat === p.id && subs.map(s => (
+                  <label key={s.id} className="flex items-center justify-between gap-3 pl-5 py-1.5 text-sm cursor-pointer">
+                    <span>{s.name} <span className="text-xs text-muted num">· usual {rand0(usual.get(s.id) ?? 0)}</span></span>
+                    <input type="checkbox" className="w-5 h-5 accent-[var(--pine)]" checked={s.discretionary} onChange={e => void toggle(s.id, e.target.checked)} />
+                  </label>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
+      <Household isOwner={member?.role === 'owner'} />
+
+      <Card title="Signed in" sub={member?.email ?? ''}><button className="btn btn-ghost" onClick={() => void signOut()}>Sign out</button></Card>
+    </div>
+  )
+}
+
+function Household({ isOwner }: { isOwner: boolean }) {
+  const { data: members, reload } = useLoad(async () => ((await supabase.from('pf_members').select('*').order('created_at')).data ?? []) as Member[], [])
+  const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [msg, setMsg] = useState<string>(); const [busy, setBusy] = useState(false)
+  async function add() {
+    setBusy(true); setMsg(undefined)
+    const { data, error } = await supabase.functions.invoke('pf-invite', { body: { name, email } })
+    if (error || data?.error) setMsg(data?.error ?? error?.message)
+    else { setMsg(data.status === 'created' ? `Login created. Temporary password: ${data.temp_password} — pass it on and ask them to change it.` : 'Added — they can sign in with their existing password.'); setName(''); setEmail(''); void reload() }
+    setBusy(false)
+  }
+  async function remove(m: Member) { if (confirm(`Remove ${m.display_name} from the household? Their login stays, but Kompas closes to them.`)) { await supabase.from('pf_members').delete().eq('user_id', m.user_id); void reload() } }
+  return (
+    <Card title="Household" sub="Only these people can open Kompas — everyone sees the same accounts.">
+      <div className="divide-y divide-line mb-3">
+        {members?.map(m => <div key={m.user_id} className="flex items-center justify-between py-2 text-sm"><span><span className="font-medium">{m.display_name}</span> <span className="text-muted">· {m.email}</span></span>{m.role === 'owner' ? <span className="chip">owner</span> : isOwner && <button className="text-bad text-xs font-semibold" onClick={() => void remove(m)}>Remove</button>}</div>)}
+      </div>
+      {isOwner && (
+        <div className="grid sm:grid-cols-[1fr_1.4fr_auto] gap-2">
+          <input className="input" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
+          <input className="input" type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} />
+          <button className="btn btn-primary" disabled={busy || !name || !email} onClick={() => void add()}>Add</button>
+        </div>
+      )}
+      {msg && <p className="text-sm mt-3 rounded-xl bg-surface-2 p-3">{msg}</p>}
+    </Card>
+  )
+}

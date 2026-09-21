@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* Kompas — pine, cream and coral. Tokens are CSS variables so dark mode is a single override. */
+:root {
+  --bg: #f6f1e7; --surface: #fffdf8; --surface-2: #efe8d9; --ink: #16302b; --muted: #6b7a74; --line: #e6dfd0;
+  --pine: #1f5f54; --pine-deep: #12332e; --coral: #e0694a; --gold: #e2b04a; --sage: #a9c4b3;
+  --good: #2f7d5b; --bad: #c4493a;
+  /* chart series — validated (CVD + contrast) against --surface in both modes; fixed order, never cycled */
+  --s1: #eb6834; --s2: #2a78d6; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948; --s-other: #a9aca3;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1c19; --surface: #152925; --surface-2: #1b332e; --ink: #eef0e6; --muted: #93a59d; --line: #25423b;
+    --pine: #6fbfa9; --pine-deep: #0a1614; --coral: #f0805f; --gold: #ecc063; --sage: #4d7565;
+    --good: #6fce9f; --bad: #f08877;
+    --s1: #d95926; --s2: #3987e5; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767; --s-other: #5d6b65;
+    color-scheme: dark;
+  }
+}
+
+@theme {
+  --color-bg: var(--bg); --color-surface: var(--surface); --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink); --color-muted: var(--muted); --color-line: var(--line);
+  --color-pine: var(--pine); --color-pine-deep: var(--pine-deep); --color-coral: var(--coral);
+  --color-gold: var(--gold); --color-sage: var(--sage); --color-good: var(--good); --color-bad: var(--bad);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+.num { font-variant-numeric: tabular-nums; }
+.display { font-family: var(--font-display); letter-spacing: -0.01em; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border-radius: 999px; padding: .6rem 1.1rem; font-weight: 600; font-size: .9rem; transition: transform .08s, opacity .15s; }
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .5; }
+.btn-primary { background: var(--pine); color: var(--surface); }
+.btn-coral { background: var(--coral); color: #fff; }
+.btn-ghost { border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
+.input { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .6rem .8rem; color: var(--ink); }
+.input:focus { outline: 2px solid var(--pine); outline-offset: 1px; }
+.chip { display: inline-flex; align-items: center; gap: .35rem; border-radius: 999px; padding: .2rem .6rem; font-size: .72rem; font-weight: 600; background: var(--surface-2); color: var(--muted); }
+
+/* iOS zooms inputs under 16px */
+@media (max-width: 640px) { input, select, textarea { font-size: 16px !important; } }

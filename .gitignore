@@ -1,0 +1,21 @@
+logs
+*.log
+node_modules
+dist
+dist-ssr
+*.local
+.vscode/*
+.idea
+.DS_Store
+
+# secrets
+scripts/.env
+supabase/.temp/
+
+# personal financial data must never be committed (repo is public)
+scripts/seed-data.json
+scripts/data/
+*.xlsx
+*.xls
+*.pdf
+*.csv
