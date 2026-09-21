@@ -121,6 +121,16 @@ begin
    where match = 'exact' and pattern = n and (account_id is null or account_id = p_account)
    order by account_id nulls last limit 1;
   if r is not null then return r; end if;
+  -- keyword rules ('discbank', 'afriforum', …) are deliberate, so they come before any fuzzy matching
+  select category_id into r from pf_rules
+   where match = 'contains' and n like '%' || pattern || '%'
+   order by length(pattern) desc limit 1;
+  if r is not null then return r; end if;
+  -- FNB words a payment by HOW it was made ("FNB App Payment To …", "Payshap Account Off-Us …"): everything that
+  -- starts that way shares a long stem but has nothing else in common, so fuzzy matching is off for those.
+  if n ~ '^(fnbapp|internetpmt|internettrf|payshapaccount|sendmoneyapp|magtape|debicheck|scheduledtrf|scheduledpmt|fnbobpmt|rtccredit|eftpayment)' then
+    return null;
+  end if;
   select category_id into r from pf_rules
    where match in ('exact','prefix') and length(pattern) >= 8 and length(n) >= 8
      and (n like pattern || '%' or pattern like n || '%')
@@ -133,11 +143,7 @@ begin
      where match in ('exact','prefix') and pattern like left(n, 12) || '%'
        and (account_id is null or account_id = p_account)
      group by category_id order by count(*) desc limit 1;
-    if r is not null then return r; end if;
   end if;
-  select category_id into r from pf_rules
-   where match = 'contains' and n like '%' || pattern || '%'
-   order by length(pattern) desc limit 1;
   return r;
 end $$;
 

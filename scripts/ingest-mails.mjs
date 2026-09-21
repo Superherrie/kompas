@@ -1,4 +1,4 @@
-// Posts Discovery "Transaction update" mails to the pf-ingest-email function.
+// Posts bank mails (Discovery "Transaction update" + FNB inContact) to the pf-ingest-email function, which tells them apart.
 //   node scripts/ingest-mails.mjs mails.json [--dry]
 // mails.json = [{ "id": "<internetMessageId>", "sent": "2026-09-21T06:02:23Z", "text": "Card payment … Available balance: R …" }]
 // Used by the scheduled mail-sync task; the ingest token lives in the git-ignored scripts/.env.
