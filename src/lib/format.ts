@@ -1,11 +1,9 @@
-const zar = new Intl.NumberFormat('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const zar0 = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 0 })
 const spaced = (s: string) => s.replace(new RegExp('[,\u00a0\u202f]', 'g'), ' ')
 
-/** R 1 234.56 (always positive — sign is the caller's business) */
-export const rand = (n: number) => `R ${spaced(zar.format(Math.abs(n))).replace(/,(\d\d)$/, '.$1')}`
-/** R 1 235 */
+/** R 1 235 — whole rands everywhere (Herman: no cents); always positive, the sign is the caller's business */
 export const rand0 = (n: number) => `R ${spaced(zar0.format(Math.abs(Math.round(n))))}`
+export const rand = rand0
 /** R12k for chart axes */
 export const randK = (n: number) => Math.abs(n) >= 1000 ? `R${(n / 1000).toFixed(Math.abs(n) >= 10000 ? 0 : 1)}k` : `R${Math.round(n)}`
 
