@@ -224,7 +224,12 @@ function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; previe
         {d.items.length > 0 && (
           <div className="rounded-2xl bg-surface-2 p-3 text-sm max-h-40 overflow-y-auto">
             {d.items.map((i, k) => <div key={k} className="flex justify-between gap-3 py-0.5"><span className="truncate">{i.qty ? `${i.qty} × ` : ''}{i.name}</span><span className="num">{i.amount === null ? '' : rand(i.amount)}</span></div>)}
-            {amount > 0 && Math.abs(itemsSum - amount) > 0.05 && <p className="text-xs text-muted border-t border-line mt-1 pt-1">Items add up to {rand(itemsSum)} — some lines may have been misread; the total above is what counts.</p>}
+            {Math.abs(itemsSum - (amount || 0)) > 0.05 && (
+              <p className="text-xs text-muted border-t border-line mt-1 pt-1">
+                Items add up to {itemsSum.toFixed(2)} (incl. VAT), the total box says {(amount || 0).toFixed(2)}.{' '}
+                <button className="underline font-semibold text-pine" onClick={() => setTotal(itemsSum.toFixed(2))}>Use {itemsSum.toFixed(2)}</button>
+              </p>
+            )}
           </div>
         )}
         <button className="text-xs text-muted underline" onClick={() => setShowText(t => !t)}>{showText ? 'Hide' : 'Show'} raw text</button>

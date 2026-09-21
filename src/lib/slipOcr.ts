@@ -22,7 +22,8 @@ function findDate(text: string): string | null {
 }
 
 const NOT_TOTAL = /sub\s*-?\s*total|vat|tax|saving|discount|tender|change|round|points|balance b|loyalty|tip\b/i
-const NOT_ITEM = /total|vat|tax|tender|change|cash|card|visa|master|debit|credit|round|balance|saving|discount|invoice|tel|auth|approved|\bpin\b|batch|terminal|merchant/i
+const EX_VAT = /excl|ex\.? ?vat|ex\.? ?tax|before (vat|tax)|\bnett?\b|taxable|vatable|non-?vat|zero.?rated/i
+const NOT_ITEM =/total|vat|tax|tender|change|cash|card|visa|master|debit|credit|round|balance|saving|discount|invoice|tel|auth|approved|\bpin\b|batch|terminal|merchant/i
 
 export function parseSlipText(text: string): SlipDraft {
   const lines = text.split(/\r?\n/).map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean)
@@ -30,19 +31,30 @@ export function parseSlipText(text: string): SlipDraft {
   // shop name: first line near the top that reads like words rather than an address, number or header
   const merchant = lines.slice(0, 8).find(l => (l.match(/[A-Za-z]/g)?.length ?? 0) >= 4 && !/tax invoice|invoice|vat ?(no|reg)|reg\.? ?no|tel|www\.|\.co\.za|welcome|customer copy|\d{4,}/i.test(l)) ?? lines[0] ?? ''
 
-  // total: the last "TOTAL / AMOUNT DUE" style line; then a card-payment line; then the largest amount on the slip
+  // total = what was PAID, VAT included. Slips print several "total" lines — sub-total, total excl. VAT, the taxable
+  // total in the VAT summary at the bottom — so collect every candidate, drop the ex-VAT ones and take the largest
+  // (an inclusive total is never smaller than the exclusive one printed near it).
   let total: number | null = null, totalAt = lines.length
-  for (let i = lines.length - 1; i >= 0 && total === null; i--) {
-    if (/\b(total|amount due|amt due|balance due|due|to pay|bill total)\b/i.test(lines[i]) && !NOT_TOTAL.test(lines[i])) {
-      const v = monies(lines[i]).concat(monies(lines[i + 1] ?? ''))          // amount sometimes wraps to the next line
-      if (v.length) { total = Math.abs(v[0]); totalAt = i }
-    }
-  }
+  lines.forEach((l, i) => {
+    const inclTag = /incl\w*\.? ?(vat|tax)|(vat|tax) ?incl\w*/i
+    if (!/\b(total|amount due|amt due|balance due|due|to pay|bill total)\b/i.test(l) || EX_VAT.test(l) || NOT_TOTAL.test(l.replace(inclTag, ''))) return
+    const own = monies(l).map(Math.abs)
+    const v = own.length ? own : monies(lines[i + 1] ?? '').map(Math.abs)      // amount sometimes wraps to the next line
+    if (!v.length) return
+    totalAt = Math.min(totalAt, i)
+    if (total === null || Math.max(...v) > total) total = Math.max(...v)
+  })
   if (total === null) for (const l of lines) if (/\b(card|visa|master|debit|credit|purchase|amount)\b/i.test(l) && !NOT_TOTAL.test(l)) { const v = monies(l); if (v.length) { total = Math.abs(v[v.length - 1]); break } }
   if (total === null) { const all = lines.filter(l => !/tender|change/i.test(l)).flatMap(monies).map(Math.abs); if (all.length) total = Math.max(...all) }
 
-  const vatLine = lines.find(l => /\b(vat|tax)\b/i.test(l) && !/vat ?(no|reg|#)|tax invoice|incl/i.test(l) && monies(l).length)
+  // the VAT amount line ("VAT 15%  45.00") — not "TOTAL EXCL VAT 300.00", "VAT NO …" or "TAX INVOICE"
+  const vatLine = lines.find(l => /\b(vat|tax)\b/i.test(l) && !/vat ?(no|reg|#)|tax invoice|incl|total|taxable|vatable/i.test(l) && !EX_VAT.test(l) && monies(l).length)
   const vat = vatLine ? Math.abs(monies(vatLine).slice(-1)[0]) : null
+
+  // still holding the ex-VAT figure? If total + VAT is itself printed on the slip (card line, amount tendered), that is what was paid
+  const near = (x: number, y: number) => Math.abs(x - y) <= 0.06
+  const printed = lines.flatMap(monies).map(Math.abs)
+  if (total !== null && vat !== null && vat > 0 && printed.some(m => near(m, total! + vat))) total = Math.round((total + vat) * 100) / 100
 
   const cardLast4 = text.match(/(?:\*|x|X|#|\.){4,}\s?(\d{4})\b/)?.[1] ?? null
   const paidCash = /\bcash\b/i.test(text) && /tender|change/i.test(text) && !cardLast4 && !/\b(visa|master ?card|debit card|credit card|contactless|tap)\b/i.test(text)
@@ -55,6 +67,10 @@ export function parseSlipText(text: string): SlipDraft {
     const q = m[1].match(/^(\d{1,2})\s?[xX@]\s+(.*)$/)
     items.push({ name: (q ? q[2] : m[1]).trim(), qty: q ? +q[1] : null, amount: num(m[2]) })
   }
+
+  // lines read VAT-inclusive but the "total" was the ex-VAT one: the items say what was paid
+  const itemSum = items.reduce((t, i) => t + (i.amount ?? 0), 0)
+  if (total !== null && vat !== null && vat > 0 && items.length > 1 && near(itemSum, total + vat)) total = Math.round((total + vat) * 100) / 100
 
   // Personal use: every line is shown VAT-inclusive. Most tills print inclusive prices already; when a slip lists
   // exclusive lines (items + VAT = total, e.g. wholesalers and some restaurants) gross the lines up so they add to what was paid.
