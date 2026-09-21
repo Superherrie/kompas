@@ -6,6 +6,8 @@ import type { SlipItem } from './types'
 export interface SlipDraft {
   merchant: string; date: string | null; time: string | null; total: number | null; vat: number | null
   payment_method: 'card' | 'cash' | 'unknown'; card_last4: string | null; items: SlipItem[]; text: string
+  /** filled by the Claude reader */ tip?: number | null; category_id?: number | null
+  /** shown on the review screen, e.g. when the fallback reader had to be used */ notice?: string
 }
 
 const MONEY = /(?:R\s?)?(-?\d{1,3}(?:[ ,]\d{3})*[.,]\d{2})(?!\d)/g

@@ -99,8 +99,8 @@ function Household({ isOwner }: { isOwner: boolean }) {
 }
 
 const READERS = [
-  { v: 'device', title: 'On this device · free', text: 'Read on your phone, nothing sent anywhere. You confirm the shop, total and date before saving.' },
-  { v: 'claude', title: 'Claude · about 50c (ZAR) a slip', text: 'Much better on crumpled or faded slips and line items. Needs ANTHROPIC_API_KEY set on the Supabase project.' },
+  { v: 'claude', title: 'Claude · about 10c (ZAR) a slip', text: 'Reads the photo in a few seconds — shop, total, date, tip and every line item. Needs ANTHROPIC_API_KEY set on the Supabase project; until then slips fall back to the device reader.' },
+  { v: 'device', title: 'On this device · free', text: 'Nothing leaves the phone, but it misreads digits even on clean slips (R157.91 became R167.91) — check every figure.' },
 ]
 
 function SlipReader() {
@@ -110,7 +110,7 @@ function SlipReader() {
     <Card title="Slip reader" sub="How a photographed slip is turned into shop, total and items.">
       <div className="grid sm:grid-cols-2 gap-3">
         {READERS.map(r => (
-          <button key={r.v} onClick={() => void set(r.v)} className={`text-left rounded-2xl border p-3 ${(reader ?? 'device') === r.v ? 'border-pine bg-pine/10' : 'border-line'}`}>
+          <button key={r.v} onClick={() => void set(r.v)} className={`text-left rounded-2xl border p-3 ${(reader ?? 'claude') === r.v ? 'border-pine bg-pine/10' : 'border-line'}`}>
             <p className="font-semibold text-sm">{r.title}</p><p className="text-xs text-muted mt-0.5">{r.text}</p>
           </button>
         ))}

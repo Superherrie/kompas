@@ -45,23 +45,22 @@ export default function Slips() {
     const preview = URL.createObjectURL(file)
     try {
       const blob = await shrink(file)
-      if (reader !== 'claude') {
-        setStage({ step: 'working', label: 'Reading the slip…', preview })
-        const draft = await readSlip(file, pct => setStage({ step: 'working', label: `Reading the slip… ${pct}%`, preview }))
-        setStage({ step: 'review', draft, blob, preview })
-        if (input.current) input.current.value = ''
-        return
-      }
-      setStage({ step: 'working', label: 'Uploading…', preview })
-      const path = `${session.user.id}/${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`
-      const up = await supabase.storage.from('pf-slips').upload(path, blob, { contentType: 'image/jpeg' })
-      if (up.error) throw new Error(up.error.message)
       setStage({ step: 'working', label: 'Reading the slip…', preview })
-      const { data, error } = await supabase.functions.invoke('pf-scan-slip', { body: { path } })
-      if (error) { const body = await (error as { context?: Response }).context?.json?.().catch(() => null); throw new Error(body?.error ?? error.message) }
-      if (data?.error) throw new Error(data.error)
-      setStage({ step: 'done', slip: data.slip, txnId: data.txn_id, created: data.created, preview })
-      void reload(); void reloadFinance()
+      let draft: SlipDraft | undefined, fallback: string | undefined
+      if (reader !== 'device') {
+        // Claude reads the photo (a few seconds); nothing is stored until the review screen is saved
+        const image = await new Promise<string>((ok, fail) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = () => fail(new Error('could not read the photo')); r.readAsDataURL(blob) })
+        const { data, error } = await supabase.functions.invoke('pf-scan-slip', { body: { image, media: 'image/jpeg' } })
+        const body = error ? await (error as { context?: Response }).context?.json?.().catch(() => null) : data
+        if (body?.draft) draft = { ...body.draft, payment_method: body.draft.payment_method ?? 'unknown', items: body.draft.items ?? [], text: '' }
+        else fallback = body?.error ?? error?.message ?? 'the reader did not answer'
+      }
+      if (!draft) {
+        // no API key yet, or the service is down: read it on the device so the slip isn't lost — and say so
+        draft = await readSlip(file, pct => setStage({ step: 'working', label: `Reading on this device… ${pct}%`, preview }))
+        if (fallback) draft.notice = `Claude couldn’t read this one (${fallback}), so it was read on this device — check every figure.`
+      }
+      setStage({ step: 'review', draft, blob, preview })
     } catch (e) { setStage({ step: 'error', message: String((e as Error).message ?? e) }) }
     if (input.current) input.current.value = ''
   }
@@ -73,7 +72,7 @@ export default function Slips() {
       const path = `${session.user.id}/${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`
       const up = await supabase.storage.from('pf-slips').upload(path, blob, { contentType: 'image/jpeg' })
       if (up.error) throw new Error(up.error.message)
-      const { data, error } = await supabase.rpc('pf_file_slip', { p: { ...d, image_path: path, reader: 'device' } })
+      const { data, error } = await supabase.rpc('pf_file_slip', { p: { ...d, image_path: path, reader: d.notice || reader === 'device' ? 'device' : 'claude' } })
       if (error) throw new Error(error.message)
       const { data: slip } = await supabase.from('pf_slips').select('*').eq('id', data.slip_id).single()
       setStage({ step: 'done', slip: slip as Slip, txnId: data.txn_id, created: data.created, preview })
@@ -91,7 +90,7 @@ export default function Slips() {
           <div className="py-6">
             <div className="mx-auto w-16 h-16 rounded-full bg-coral/15 text-coral grid place-items-center mb-3"><Icon name="camera" size={30} /></div>
             <p className="font-semibold">Snap the slip before it goes in the bin</p>
-            <p className="text-sm text-muted max-w-sm mx-auto mt-1 mb-4">Kompas reads the shop, total and line items on your phone, you check them, and it ties the slip to the card payment — so “Checkers R699” becomes what you actually bought.</p>
+            <p className="text-sm text-muted max-w-sm mx-auto mt-1 mb-4">Kompas reads the shop, total and line items, you check them, and it ties the slip to the card payment — so “Checkers R699” becomes what you actually bought.</p>
             <button className="btn btn-coral" onClick={() => input.current?.click()}><Icon name="camera" />Scan a slip</button>
           </div>
         )}
@@ -192,8 +191,8 @@ function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; previe
   const { categories } = useFinance()
   const [d, setD] = useState({ ...draft, date: draft.date ?? today() })
   const [total, setTotal] = useState(draft.total === null ? '' : draft.total.toFixed(2))
-  const [cat, setCat] = useState<number | null>(null)
-  const [tipText, setTipText] = useState('')
+  const [cat, setCat] = useState<number | null>(draft.category_id ?? null)
+  const [tipText, setTipText] = useState(draft.tip ? draft.tip.toFixed(2) : '')
   const [claimable, setClaimable] = useState(false)
   const [showText, setShowText] = useState(false)
   const amount = parseFloat(total.replace(',', '.'))
@@ -216,6 +215,7 @@ function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; previe
       <a href={preview} target="_blank" rel="noreferrer" className="shrink-0"><img src={preview} alt="Slip" className="h-56 rounded-xl object-cover mx-auto sm:mx-0 mb-3 sm:mb-0" /></a>
       <div className="flex-1 min-w-0 space-y-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">Check what was read</p>
+        {draft.notice && <p className="text-sm rounded-xl bg-gold/20 p-2.5">{draft.notice}</p>}
         {draft.total === null && <p className="text-sm text-bad">Couldn’t find the total — type it in from the slip.</p>}
         <input className="input" placeholder="Shop" value={d.merchant} onChange={e => setD({ ...d, merchant: e.target.value })} />
         <div className="grid grid-cols-2 gap-3">
@@ -253,7 +253,7 @@ function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; previe
             )}
           </div>
         )}
-        <button className="text-xs text-muted underline" onClick={() => setShowText(t => !t)}>{showText ? 'Hide' : 'Show'} raw text</button>
+        {draft.text && <button className="text-xs text-muted underline" onClick={() => setShowText(t => !t)}>{showText ? 'Hide' : 'Show'} raw text</button>}
         {showText && <pre className="text-[11px] bg-surface-2 rounded-xl p-2 max-h-40 overflow-auto whitespace-pre-wrap">{draft.text}</pre>}
         <div className="flex gap-2"><button className="btn btn-ghost" onClick={onCancel}>Discard</button><button className="btn btn-coral flex-1" disabled={!(amount > 0) || !d.merchant.trim()} onClick={() => onSave({ ...d, total: amount, tip, category_id: cat, claimable })}>Save slip</button></div>
       </div>
