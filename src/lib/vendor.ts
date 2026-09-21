@@ -3,9 +3,9 @@
 
 // chains first: [needle in the normalised description, display name]. Order matters (liquor before the grocer it belongs to).
 const CHAINS: [RegExp, string][] = [
-  [/sixty60/, 'Checkers Sixty60'], [/liquorshop|checkersliq/, 'Checkers LiquorShop'], [/checkers/, 'Checkers'], [/shoprite/, 'Shoprite'],
+  [/sixty60/, 'Checkers Sixty60'], [/liquorshop|checkersliq/, 'Checkers LiquorShop'], [/checkers|cxfresh|freshx|fresh x|^cx /, 'Checkers'],      // "CX Fresh X Jukskei Par SB…" = Checkers FreshX (same SB terminal codes) [/shoprite/, 'Shoprite'],
   [/pnpliq|picknpayliq/, 'Pick n Pay Liquor'], [/pnp|picknpay/, 'Pick n Pay'], [/tops(at)?spar|\btops\b/, 'Tops at Spar'], [/spar\b|superspar|kwikspar|spar/, 'Spar'],
-  [/woolworths|woolies|\bww\b/, 'Woolworths'], [/foodlovers|flm\b/, 'Food Lover’s Market'], [/cxfresh|freshx|fresh x/, 'Fresh X'], [/makro/, 'Makro'],
+  [/woolworths|woolies|\bww\b/, 'Woolworths'], [/foodlovers|flm\b/, 'Food Lover’s Market'], [/makro/, 'Makro'],
   [/liquorcity/, 'Liquor City'], [/ultraliq/, 'Ultra Liquors'], [/norman ?goodfellow/, 'Norman Goodfellows'],
   [/ubereats|uber \*?eats/, 'Uber Eats'], [/mrd(food)?\b|mrdelivery/, 'Mr D'], [/spur\b|spur|riverfallssp/, 'Spur'], [/4fifty1/, '4Fifty1'], [/foreverresort/, 'Forever Resorts Swadini'], [/muggnbean|^mandb/, 'Mugg & Bean'], [/kfc/, 'KFC'], [/mcd\b|mcdonald/, 'McDonald’s'],
   [/nandos/, 'Nando’s'], [/steers/, 'Steers'], [/wimpy/, 'Wimpy'], [/romans/, 'Roman’s Pizza'], [/debonairs/, 'Debonairs'], [/burgerking/, 'Burger King'],
