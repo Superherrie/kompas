@@ -13,9 +13,11 @@ const apply = process.argv.includes('--apply')
 const { data: payers } = await sb.from('pf_settings').select('value').eq('key', 'claim_payers').maybeSingle()
 const names = (payers?.value ?? 'interconnect systems,asi connect').split(',').map((s: string) => s.trim()).filter(Boolean)
 
-const { data: flagged, error: e1 } = await sb.from('pf_v_txns').select('id,txn_date,description,amount').eq('claimable', true).is('repaid_on', null).order('txn_date')
+const { data: st } = await sb.from('pf_settings').select('value').eq('key', 'claims_start_date').maybeSingle()
+const start = st?.value || '1900-01-01'          // take-on date: older history is not reconciled
+const { data: flagged, error: e1 } = await sb.from('pf_v_txns').select('id,txn_date,description,amount').eq('claimable', true).is('repaid_on', null).gte('txn_date', start).order('txn_date')
 if (e1) throw new Error(e1.message)
-const { data: credits, error: e2 } = await sb.from('pf_v_txns').select('id,txn_date,description,amount,sub_name').gt('amount', 0)
+const { data: credits, error: e2 } = await sb.from('pf_v_txns').select('id,txn_date,description,amount,sub_name').gt('amount', 0).gte('txn_date', start)
   .or(names.map((n: string) => `description.ilike.%${n}%`).join(',')).neq('sub_name', 'Reimbursed by work').order('txn_date')
 if (e2) throw new Error(e2.message)
 

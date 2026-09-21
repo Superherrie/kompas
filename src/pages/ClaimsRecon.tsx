@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useFinance } from '../context/FinanceContext'
-import { fetchAll, getSetting, useLoad } from '../lib/data'
+import { fetchAll, getSetting, setSetting, useLoad } from '../lib/data'
 import { addMonths, dayLabel, monthLabel, rand, today } from '../lib/format'
 import { Card } from '../components/Charts'
 import Claims from '../components/Claims'
@@ -16,15 +16,17 @@ export default function ClaimsRecon() {
 
   const { data } = useLoad(async () => {
     const names = ((await getSetting('claim_payers')) ?? 'interconnect systems,asi connect').split(',').map(n => n.trim()).filter(Boolean)
+    const start = (await getSetting('claims_start_date')) || '1900-01-01'
     const [claimable, unmatched, settled] = await Promise.all([
-      fetchAll<Txn & { repaid_by: number | null }>(() => supabase.from('pf_v_txns').select('*').eq('claimable', true).order('txn_date', { ascending: false })),
-      supabase.from('pf_v_txns').select('*').gt('amount', 0).neq('sub_name', 'Reimbursed by work').or(names.map(n => `description.ilike.%${n}%`).join(',')).order('txn_date', { ascending: false }),
-      supabase.from('pf_v_txns').select('*').eq('sub_name', 'Reimbursed by work').order('txn_date', { ascending: false }),
+      fetchAll<Txn & { repaid_by: number | null }>(() => supabase.from('pf_v_txns').select('*').eq('claimable', true).gte('txn_date', start).order('txn_date', { ascending: false })),
+      supabase.from('pf_v_txns').select('*').gt('amount', 0).gte('txn_date', start).neq('sub_name', 'Reimbursed by work').or(names.map(n => `description.ilike.%${n}%`).join(',')).order('txn_date', { ascending: false }),
+      supabase.from('pf_v_txns').select('*').eq('sub_name', 'Reimbursed by work').gte('txn_date', start).order('txn_date', { ascending: false }),
     ])
     // pf_v_txns doesn't carry repaid_by — read the links straight from the table
     const { data: links } = await supabase.from('pf_transactions').select('id,repaid_by').not('repaid_by', 'is', null)
     const by = new Map((links ?? []).map(l => [l.id as number, l.repaid_by as number]))
     return {
+      start,
       items: claimable.map(t => ({ ...t, amount: +t.amount, repaid_by: by.get(t.id) ?? null })),
       unmatched: ((unmatched.data ?? []) as Txn[]).map(t => ({ ...t, amount: +t.amount })),
       settled: ((settled.data ?? []) as Txn[]).map(t => ({ ...t, amount: +t.amount })),
@@ -54,13 +56,14 @@ export default function ClaimsRecon() {
       <div>
         <h1 className="display text-3xl md:text-4xl">Claims recon</h1>
         <p className="text-sm text-muted mt-1">Everything you’ve ticked “claim back from work”, until the company has paid it back.</p>
+        <StartDate value={data?.start} onSaved={changed} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Tile label="Not yet reimbursed" value={rand(outstanding)} hint={`${open.length} item${open.length === 1 ? '' : 's'}`} bad={outstanding > 0} />
         <Tile label="Oldest open item" value={oldest ? dayLabel(oldest).replace(/^\w+ /, '') : '—'} hint={oldest ? `${daysSince(oldest)} days ago` : 'nothing open'} />
         <Tile label="Company payments to match" value={String(data?.unmatched.length ?? 0)} hint={rand((data?.unmatched ?? []).reduce((s, p) => s + p.amount, 0))} />
-        <Tile label="Reimbursed, last 12 months" value={rand(repaid12)} hint={`${data?.settled.length ?? 0} payments in total`} />
+        <Tile label="Reimbursed since the start date" value={rand(repaid12)} hint={`${data?.settled.length ?? 0} payments in total`} />
       </div>
 
       <Claims version={tick} onChanged={changed} />
@@ -113,4 +116,18 @@ export default function ClaimsRecon() {
 
 function Tile({ label, value, hint, bad }: { label: string; value: string; hint?: string; bad?: boolean }) {
   return <div className="card px-4 py-3"><p className="text-xs text-muted">{label}</p><p className={`display text-2xl num ${bad ? 'text-bad' : ''}`}>{value}</p>{hint && <p className="text-xs text-muted">{hint}</p>}</div>
+}
+
+/** take-on date: claims and company payments before it are left alone (they can't be reconciled any more) */
+function StartDate({ value, onSaved }: { value?: string; onSaved: () => void }) {
+  const [draft, setDraft] = useState<string>()
+  if (!value) return null
+  return (
+    <p className="text-xs text-muted mt-2 flex flex-wrap items-center gap-2">
+      Reconciling from
+      <input type="date" className="input !w-auto !py-1 !text-xs" value={draft ?? (value === '1900-01-01' ? '' : value)} onChange={e => setDraft(e.target.value)} />
+      {draft !== undefined && draft !== value && <button className="chip !bg-pine !text-surface" onClick={() => void setSetting('claims_start_date', draft).then(() => { setDraft(undefined); onSaved() })}>Save</button>}
+      <span>— older items keep their “claim” tick (still outside your spending) but are ignored here.</span>
+    </p>
+  )
 }

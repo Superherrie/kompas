@@ -22,9 +22,10 @@ export default function Claims({ version, onChanged }: { version: unknown; onCha
   async function matchPayments() {
     setBusy(true)
     const names = ((await getSetting('claim_payers')) ?? 'interconnect systems,asi connect').split(',').map(n => n.trim()).filter(Boolean)
+    const start = (await getSetting('claims_start_date')) || '1900-01-01'      // take-on date: older history is not reconciled
     const [items, pays] = await Promise.all([
-      supabase.from('pf_v_txns').select('id,txn_date,description,amount').eq('claimable', true).is('repaid_on', null),
-      supabase.from('pf_v_txns').select('id,txn_date,description,amount').gt('amount', 0).neq('sub_name', 'Reimbursed by work').or(names.map(n => `description.ilike.%${n}%`).join(',')),
+      supabase.from('pf_v_txns').select('id,txn_date,description,amount').eq('claimable', true).is('repaid_on', null).gte('txn_date', start),
+      supabase.from('pf_v_txns').select('id,txn_date,description,amount').gt('amount', 0).gte('txn_date', start).neq('sub_name', 'Reimbursed by work').or(names.map(n => `description.ilike.%${n}%`).join(',')),
     ])
     const r = matchClaims(
       (items.data ?? []).map(t => ({ id: t.id, date: t.txn_date, amount: -t.amount, description: t.description })),
