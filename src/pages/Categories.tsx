@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Bar as RBar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useFinance } from '../context/FinanceContext'
 import { getTxns, useLoad } from '../lib/data'
@@ -32,7 +32,10 @@ export default function Categories() {
   const { monthly } = useFinance()
   const [month, setMonth] = useMonthParam()
   const [scope, setScope] = useState<Scope>('all')
-  const [open, setOpen] = useState<number>()
+  // the expanded category lives in the URL (?c=) so Back from a detail page lands on the same open list
+  const [sp, setSp] = useSearchParams()
+  const open = sp.get('c') ? +sp.get('c')! : undefined
+  const setOpen = (id?: number) => setSp(p => { if (id) p.set('c', String(id)); else p.delete('c'); return p }, { replace: true })
 
   const { cats, total, income } = useMemo(() => {
     const prevMonths = Array.from({ length: 6 }, (_, i) => addMonths(month, -1 - i))
@@ -104,6 +107,9 @@ export function CategoryDetail() {
   const { level, id } = useParams(); const cid = +(id ?? 0); const isSub = level === 'sub'
   const { monthly, categories, months, reload: reloadFinance } = useFinance()
   const [month, setMonth] = useMonthParam()
+  const nav = useNavigate()
+  // back = wherever you came from (Today, Categories, the parent category); a bookmarked page falls back to the category list
+  const back = () => (window.history.state?.idx ?? 0) > 0 ? nav(-1) : nav(`/categories?m=${month}`)
   const me = categories.find(c => c.id === cid)
   const parent = isSub ? categories.find(c => c.id === me?.parent_id) : undefined
 
@@ -121,6 +127,7 @@ export function CategoryDetail() {
   return (
     <div className="space-y-5">
       <div>
+        <button onClick={back} className="btn btn-ghost !py-1.5 !pl-2.5 !pr-4 mb-3"><Icon name="left" size={18} />Back</button>
         <p className="text-sm text-muted"><Link to={`/categories?m=${month}`} className="hover:text-pine">Categories</Link>{parent && <> / <Link to={`/categories/cat/${parent.id}?m=${month}`} className="hover:text-pine">{parent.name}</Link></>}</p>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h1 className="display text-3xl md:text-4xl">{me?.name ?? '…'}</h1>
