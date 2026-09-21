@@ -3,10 +3,11 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useFinance } from '../context/FinanceContext'
-import { useLoad } from '../lib/data'
-import { dayLabel, rand } from '../lib/format'
+import { getSetting, useLoad } from '../lib/data'
+import { readSlip, type SlipDraft } from '../lib/slipOcr'
+import { dayLabel, rand, today } from '../lib/format'
 import { Card } from '../components/Charts'
-import { Sheet } from '../components/Txns'
+import { CategorySelect, Sheet } from '../components/Txns'
 import Icon from '../components/Icon'
 import type { Slip } from '../lib/types'
 
@@ -19,11 +20,12 @@ async function shrink(file: File, max = 1800): Promise<Blob> {
   return new Promise((ok, fail) => c.toBlob(b => b ? ok(b) : fail(new Error('could not process the photo')), 'image/jpeg', 0.85))
 }
 
-type Stage = { step: 'idle' } | { step: 'working'; label: string; preview: string } | { step: 'done'; slip: Slip; txnId: number | null; created: boolean; preview: string } | { step: 'error'; message: string }
+type Stage = { step: 'idle' } | { step: 'review'; draft: SlipDraft; blob: Blob; preview: string } | { step: 'working'; label: string; preview: string } | { step: 'done'; slip: Slip; txnId: number | null; created: boolean; preview: string } | { step: 'error'; message: string }
 
 export default function Slips() {
   const { session } = useAuth()
   const { reload: reloadFinance } = useFinance()
+  const { data: reader } = useLoad(() => getSetting('slip_reader'), [])
   const [sp, setSp] = useSearchParams()
   const input = useRef<HTMLInputElement>(null)
   const [stage, setStage] = useState<Stage>({ step: 'idle' })
@@ -41,8 +43,15 @@ export default function Slips() {
     if (!file || !session) return
     const preview = URL.createObjectURL(file)
     try {
-      setStage({ step: 'working', label: 'Uploading…', preview })
       const blob = await shrink(file)
+      if (reader !== 'claude') {
+        setStage({ step: 'working', label: 'Reading the slip…', preview })
+        const draft = await readSlip(file, pct => setStage({ step: 'working', label: `Reading the slip… ${pct}%`, preview }))
+        setStage({ step: 'review', draft, blob, preview })
+        if (input.current) input.current.value = ''
+        return
+      }
+      setStage({ step: 'working', label: 'Uploading…', preview })
       const path = `${session.user.id}/${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`
       const up = await supabase.storage.from('pf-slips').upload(path, blob, { contentType: 'image/jpeg' })
       if (up.error) throw new Error(up.error.message)
@@ -56,6 +65,21 @@ export default function Slips() {
     if (input.current) input.current.value = ''
   }
 
+  async function saveDraft(d: SlipDraft & { category_id?: number | null }, blob: Blob, preview: string) {
+    if (!session) return
+    try {
+      setStage({ step: 'working', label: 'Saving…', preview })
+      const path = `${session.user.id}/${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`
+      const up = await supabase.storage.from('pf-slips').upload(path, blob, { contentType: 'image/jpeg' })
+      if (up.error) throw new Error(up.error.message)
+      const { data, error } = await supabase.rpc('pf_file_slip', { p: { ...d, image_path: path, reader: 'device' } })
+      if (error) throw new Error(error.message)
+      const { data: slip } = await supabase.from('pf_slips').select('*').eq('id', data.slip_id).single()
+      setStage({ step: 'done', slip: slip as Slip, txnId: data.txn_id, created: data.created, preview })
+      void reload(); void reloadFinance()
+    } catch (e) { setStage({ step: 'error', message: String((e as Error).message ?? e) }) }
+  }
+
   return (
     <div className="space-y-5">
       <h1 className="display text-3xl md:text-4xl">Slips</h1>
@@ -66,7 +90,7 @@ export default function Slips() {
           <div className="py-6">
             <div className="mx-auto w-16 h-16 rounded-full bg-coral/15 text-coral grid place-items-center mb-3"><Icon name="camera" size={30} /></div>
             <p className="font-semibold">Snap the slip before it goes in the bin</p>
-            <p className="text-sm text-muted max-w-sm mx-auto mt-1 mb-4">Kompas reads the shop, total and line items, then ties it to the card payment — so “Checkers R699” becomes what you actually bought.</p>
+            <p className="text-sm text-muted max-w-sm mx-auto mt-1 mb-4">Kompas reads the shop, total and line items on your phone, you check them, and it ties the slip to the card payment — so “Checkers R699” becomes what you actually bought.</p>
             <button className="btn btn-coral" onClick={() => input.current?.click()}><Icon name="camera" />Scan a slip</button>
           </div>
         )}
@@ -76,6 +100,7 @@ export default function Slips() {
             <p className="font-semibold animate-pulse">{stage.label}</p>
           </div>
         )}
+        {stage.step === 'review' && <Review draft={stage.draft} preview={stage.preview} onCancel={() => setStage({ step: 'idle' })} onSave={d => void saveDraft(d, stage.blob, stage.preview)} />}
         {stage.step === 'error' && (
           <div className="py-6"><p className="text-bad font-semibold mb-1">That didn’t work</p><p className="text-sm text-muted mb-4">{stage.message}</p><button className="btn btn-ghost" onClick={() => setStage({ step: 'idle' })}>Try again</button></div>
         )}
@@ -143,5 +168,43 @@ function SlipSheet({ slip, onClose, onChanged }: { slip: Slip; onClose: () => vo
         {slip.status === 'matched' && <Link to="/transactions" className="btn btn-ghost flex-1">See transactions</Link>}
       </div>
     </Sheet>
+  )
+}
+
+/** OCR is never certain on thermal paper — the three things that matter (shop, total, date) are confirmed by eye before saving */
+function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; preview: string; onSave: (d: SlipDraft & { category_id?: number | null }) => void; onCancel: () => void }) {
+  const { categories } = useFinance()
+  const [d, setD] = useState({ ...draft, date: draft.date ?? today() })
+  const [total, setTotal] = useState(draft.total === null ? '' : draft.total.toFixed(2))
+  const [cat, setCat] = useState<number | null>(null)
+  const [showText, setShowText] = useState(false)
+  const amount = parseFloat(total.replace(',', '.'))
+  const itemsSum = d.items.reduce((s, i) => s + (i.amount ?? 0), 0)
+  return (
+    <div className="text-left sm:flex gap-5">
+      <a href={preview} target="_blank" rel="noreferrer" className="shrink-0"><img src={preview} alt="Slip" className="h-56 rounded-xl object-cover mx-auto sm:mx-0 mb-3 sm:mb-0" /></a>
+      <div className="flex-1 min-w-0 space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Check what was read</p>
+        {draft.total === null && <p className="text-sm text-bad">Couldn’t find the total — type it in from the slip.</p>}
+        <input className="input" placeholder="Shop" value={d.merchant} onChange={e => setD({ ...d, merchant: e.target.value })} />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">R</span><input className="input !pl-8 num font-semibold" inputMode="decimal" placeholder="Total" value={total} onChange={e => setTotal(e.target.value)} /></div>
+          <input className="input" type="date" value={d.date ?? ''} onChange={e => setD({ ...d, date: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <select className="input" value={d.payment_method} onChange={e => setD({ ...d, payment_method: e.target.value as SlipDraft['payment_method'] })}><option value="card">Paid by card</option><option value="cash">Paid cash</option><option value="unknown">Not sure</option></select>
+          <CategorySelect categories={categories.filter(c => c.kind === 'expense')} value={cat} onChange={setCat} />
+        </div>
+        {d.items.length > 0 && (
+          <div className="rounded-2xl bg-surface-2 p-3 text-sm max-h-40 overflow-y-auto">
+            {d.items.map((i, k) => <div key={k} className="flex justify-between gap-3 py-0.5"><span className="truncate">{i.qty ? `${i.qty} × ` : ''}{i.name}</span><span className="num">{i.amount === null ? '' : rand(i.amount)}</span></div>)}
+            {amount > 0 && Math.abs(itemsSum - amount) > 0.05 && <p className="text-xs text-muted border-t border-line mt-1 pt-1">Items add up to {rand(itemsSum)} — some lines may have been misread; the total above is what counts.</p>}
+          </div>
+        )}
+        <button className="text-xs text-muted underline" onClick={() => setShowText(t => !t)}>{showText ? 'Hide' : 'Show'} raw text</button>
+        {showText && <pre className="text-[11px] bg-surface-2 rounded-xl p-2 max-h-40 overflow-auto whitespace-pre-wrap">{draft.text}</pre>}
+        <div className="flex gap-2"><button className="btn btn-ghost" onClick={onCancel}>Discard</button><button className="btn btn-coral flex-1" disabled={!(amount > 0) || !d.merchant.trim()} onClick={() => onSave({ ...d, total: amount, category_id: cat })}>Save slip</button></div>
+      </div>
+    </div>
   )
 }

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useFinance } from '../context/FinanceContext'
-import { setSetting, useLoad } from '../lib/data'
+import { getSetting, setSetting, useLoad } from '../lib/data'
 import { addMonths, rand0, thisMonth } from '../lib/format'
 import { Card } from '../components/Charts'
 import type { Member } from '../lib/types'
@@ -59,6 +59,8 @@ export default function Settings() {
         </div>
       </Card>
 
+      <SlipReader />
+
       <Household isOwner={member?.role === 'owner'} />
 
       <Card title="Signed in" sub={member?.email ?? ''}><button className="btn btn-ghost" onClick={() => void signOut()}>Sign out</button></Card>
@@ -90,6 +92,24 @@ function Household({ isOwner }: { isOwner: boolean }) {
         </div>
       )}
       {msg && <p className="text-sm mt-3 rounded-xl bg-surface-2 p-3">{msg}</p>}
+    </Card>
+  )
+}
+
+function SlipReader() {
+  const { data: reader, reload } = useLoad(() => getSetting('slip_reader'), [])
+  const set = async (v: string) => { await setSetting('slip_reader', v); void reload() }
+  const Opt = ({ v, title, text }: { v: string; title: string; text: string }) => (
+    <button onClick={() => void set(v)} className={`text-left rounded-2xl border p-3 ${(reader ?? 'device') === v ? 'border-pine bg-pine/10' : 'border-line'}`}>
+      <p className="font-semibold text-sm">{title}</p><p className="text-xs text-muted mt-0.5">{text}</p>
+    </button>
+  )
+  return (
+    <Card title="Slip reader" sub="How a photographed slip is turned into shop, total and items.">
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Opt v="device" title="On this device · free" text="Read on your phone, nothing sent anywhere. You confirm the shop, total and date before saving." />
+        <Opt v="claude" title="Claude · about 50c (ZAR) a slip" text="Much better on crumpled or faded slips and line items. Needs ANTHROPIC_API_KEY set on the Supabase project." />
+      </div>
     </Card>
   )
 }
