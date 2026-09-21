@@ -19,10 +19,19 @@ const CHAINS: [RegExp, string][] = [
 const PREFIX = /^(yoco|ap|tabbs|tst|ik|snapscan|snap|zapper|payfast|pf|sq|sumup|izettle|peach|ozow|dl|paypal|pos|purchase|c)\s*\*\s*/i
 const PLACES = /\b(za|zaf|rsa|gauteng|gau|jhb|johannesbur\w*|johannesburg|pretoria|pre|pta|sandton|randburg|rand|fourways|midrand|centurion|cape town|cpt|durban|dbn|bellville|krugersdorp|roodepoort|olivedale|broadacres|bryanston|garsfontein|jukskei\w*( par\w*)?)\b.*$/i
 
+// FNB describes a payment by HOW it was made — "FNB App Payment To S Colman H De Vries" — the payee is what follows
+const BANK_HOW = /^(fnb app (rtc )?(payment|pmt|transfer) to|internet (pmt|payment|trf) to|payshap account off-?us|send money app dr send|magtape (debit|credit)|debi ?check( internal d\/o)?|scheduled (trf|pmt|payment) to|fnb ob pmt|rtc credit|eft (payment|credit)( to| from)?)\s+/i
+// …and the payer's own reference tacked on the end ("… H De Vries", "… Herman De Vries", "… Dev103")
+const OWN_REF = /\s+((h|herman|angela|a)\s+)?de\s*vries\b.*$|\s+dev\d+\b.*$/i
+// people and practices the bank spells its own way
+const PEOPLE: [RegExp, string][] = [[/^s\s+col(e)?man\b/i, 'S Coleman']]
+
 export function vendorOf(description: string): string {
   const flat = description.toLowerCase().replace(/[^a-z0-9*&. ]/g, ' '), squashed = flat.replace(/[^a-z0-9]/g, '')
   for (const [re, name] of CHAINS) if (re.test(flat) || re.test(squashed)) return name
-  let s = description.replace(PREFIX, '').replace(/\s+\S*\d{4,}\S*.*$/, '')          // drop terminal / reference numbers and what follows
+  const payee = description.replace(BANK_HOW, '').replace(OWN_REF, '').trim()
+  for (const [re, name] of PEOPLE) if (re.test(payee)) return name
+  let s = payee.replace(PREFIX, '').replace(/\s+\S*\d{4,}\S*.*$/, '')          // drop terminal / reference numbers and what follows
   s = s.replace(PLACES, '').replace(/[(*].*$/, '').replace(/\s+/g, ' ').trim()
   const words = s.split(' ').filter(Boolean).slice(0, 3).join(' ').replace(/[\s&-]+$/, '').replace(/\s+(and|the|of|on)$/i, '')
   const name = words || description.split(' ').slice(0, 2).join(' ')
