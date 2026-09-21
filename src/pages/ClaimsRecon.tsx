@@ -140,6 +140,11 @@ function ManualRecon({ payments, items, onSettled }: { payments: Txn[]; items: T
     setBusy(false); setPay(undefined); setPicked(new Set()); onSettled()
   }
 
+  async function acceptAsIs() {
+    if (!payment || !confirm(`Mark ${money(payment.amount)} as a matched expense claim without ticking what it paid for? It leaves this list and stops counting as income.`)) return
+    setBusy(true); await supabase.rpc('pf_mark_reimbursement', { p_payment: payment.id }); setBusy(false); setPay(undefined); onSettled()
+  }
+
   if (!payments.length && !items.length) return null
   return (
     <Card title="Reconcile a reimbursement" sub="Tick the payment you received, then tick the expenses it paid back. The difference updates as you go.">
@@ -181,7 +186,10 @@ function ManualRecon({ payments, items, onSettled }: { payments: Txn[]; items: T
         <Figure label="Difference" value={payment && chosen.length ? `${diff < 0 ? '−' : diff > 0 ? '+' : ''}${money(diff)}` : '—'}
           tone={!payment || !chosen.length ? undefined : Math.abs(diff) < 1 ? 'good' : 'bad'}
           hint={!payment || !chosen.length ? undefined : Math.abs(diff) < 1 ? 'balances' : diff < 0 ? 'paid back less than the expenses' : 'paid back more than the expenses'} />
-        <button className="btn btn-primary ml-auto" disabled={!payment || !chosen.length || busy} onClick={() => void settle()}>{busy ? 'Settling…' : 'Settle these'}</button>
+        <div className="ml-auto flex flex-wrap gap-2">
+          {payment && !chosen.length && <button className="btn btn-ghost" disabled={busy} onClick={() => void acceptAsIs()}>Mark as matched (no items)</button>}
+          <button className="btn btn-primary" disabled={!payment || !chosen.length || busy} onClick={() => void settle()}>{busy ? 'Settling…' : 'Settle these'}</button>
+        </div>
       </div>
     </Card>
   )
