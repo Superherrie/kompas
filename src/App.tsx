@@ -10,6 +10,7 @@ import Categories, { CategoryDetail } from './pages/Categories'
 import Transactions from './pages/Transactions'
 import Slips from './pages/Slips'
 import Settings from './pages/Settings'
+import ClaimsRecon from './pages/ClaimsRecon'
 
 // the statement parsers pull in pdf.js and SheetJS — only load them when someone imports
 // Every deploy renames the chunks, so a tab left open from before a deploy asks for a file that no longer exists and the
@@ -49,6 +50,7 @@ function Shell() {
           <Route path="categories/:level/:id" element={<CategoryDetail />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="slips" element={<Slips />} />
+          <Route path="claims" element={<ClaimsRecon />} />
           <Route path="import" element={<Boundary><Suspense fallback={<p className="text-muted py-10 text-center animate-pulse">Loading the import tools…</p>}><Import /></Suspense></Boundary>} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />

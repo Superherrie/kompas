@@ -8,6 +8,7 @@ const NAV = [
   { to: '/categories', label: 'Categories', icon: 'layers' },
   { to: '/transactions', label: 'Transactions', icon: 'list' },
   { to: '/slips', label: 'Slips', icon: 'receipt' },
+  { to: '/claims', label: 'Claims Recon', icon: 'briefcase' },
   { to: '/import', label: 'Import', icon: 'upload' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
@@ -41,6 +42,7 @@ export default function Layout() {
         <header className="md:hidden flex items-center justify-between px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-2">
           <div className="flex items-center gap-2"><Logo size={28} /><span className="display text-xl">Kompas</span></div>
           <div className="flex items-center gap-1 text-muted">
+            <NavLink to="/claims" className="p-2" aria-label="Claims recon"><Icon name="briefcase" /></NavLink>
             <NavLink to="/import" className="p-2"><Icon name="upload" /></NavLink>
             <NavLink to="/settings" className="p-2"><Icon name="settings" /></NavLink>
           </div>
