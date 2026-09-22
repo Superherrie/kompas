@@ -40,7 +40,9 @@ export function parseMail(id: string, sent: string, raw: string): Parsed | { ski
       time = `${when[3].padStart(2, "0")}:${when[4]}`;
     }
   }
-  const credit = /received|deposit|refund|reversal|paid to you|credited/i.test(kind + " " + head);
+  // "Incoming payment R 3,000.00 To Single Facility Reference: RANGER BOW …" = money IN (Discovery says "From Single Facility" for money out)
+  const opening = text.slice(0, 120);
+  const credit = (/incoming|received|deposit|refund|reversal|paid to you|credited/i.test(kind + " " + head) || /to single facility/i.test(opening)) && !/from single facility/i.test(opening);
   const bal = text.match(/Available balance:\s*R\s?(-?\d[\d ,]*\.\d{2})/i);
   return { ref: id, date, time, description, amount: (credit ? 1 : -1) * money(amt[1]), balance: bal ? money(bal[1]) : null, kind };
 }
