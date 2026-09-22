@@ -226,6 +226,8 @@ begin
             case when p_source = 'statement' then 'cleared' else 'pending' end,
             nullif(r->>'balance','')::numeric);
     ins := ins + 1;
+    -- a slip scanned earlier today may have settled for yesterday's identical line (013_slip_match_same_day.sql)
+    if p_source <> 'statement' then perform pf_reclaim_slips(currval('pf_transactions_id_seq')); end if;
   end loop;
 
   -- month-end FNB lines belong to next month's accounts (006_accounting_month.sql)

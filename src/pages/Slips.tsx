@@ -206,7 +206,7 @@ function Review({ draft, preview, onSave, onCancel }: { draft: SlipDraft; previe
   useEffect(() => {
     if (!(paid > 0)) { setFound(undefined); return }
     const t = setTimeout(() => {
-      void supabase.rpc('pf_find_payment', { p_amount: paid, p_date: d.date || null, p_merchant: d.merchant, p_infer_tip: tip === 0 })
+      void supabase.rpc('pf_find_payment', { p_amount: paid, p_date: d.date || null, p_merchant: d.merchant, p_infer_tip: tip === 0, p_time: d.time || null })
         .then(({ data }) => setFound((data as typeof found[])?.[0] ?? null))
     }, 400)
     return () => clearTimeout(t)
