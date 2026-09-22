@@ -11,6 +11,7 @@ import Transactions from './pages/Transactions'
 import Slips from './pages/Slips'
 import Settings from './pages/Settings'
 import ClaimsRecon from './pages/ClaimsRecon'
+import IncomeStatement from './pages/IncomeStatement'
 
 // the statement parsers pull in pdf.js and SheetJS — only load them when someone imports
 // Every deploy renames the chunks, so a tab left open from before a deploy asks for a file that no longer exists and the
@@ -46,6 +47,7 @@ function Shell() {
         <Route element={<Layout />}>
           <Route index element={<Today />} />
           <Route path="overview" element={<Overview />} />
+          <Route path="statement" element={<IncomeStatement />} />
           <Route path="categories" element={<Categories />} />
           <Route path="categories/:level/:id" element={<CategoryDetail />} />
           <Route path="transactions" element={<Transactions />} />

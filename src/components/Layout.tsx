@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 const NAV = [
   { to: '/', label: 'Today', icon: 'today', end: true },
   { to: '/overview', label: 'Overview', icon: 'chart' },
+  { to: '/statement', label: 'Income Statement', icon: 'table' },
   { to: '/categories', label: 'Categories', icon: 'layers' },
   { to: '/transactions', label: 'Transactions', icon: 'list' },
   { to: '/slips', label: 'Slips', icon: 'receipt' },
@@ -14,8 +15,8 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
 // phone tab bar: the three everyday screens, the camera in the middle, and "More" for everything else
-const TABS = [NAV[0], NAV[2], null, NAV[3]]
-const MORE = [NAV[1], NAV[4], NAV[5], NAV[6], NAV[7]]
+const TABS = [NAV[0], NAV[3], null, NAV[4]]
+const MORE = [NAV[1], NAV[2], NAV[5], NAV[6], NAV[7], NAV[8]]
 
 export default function Layout() {
   const { member, signOut } = useAuth()
