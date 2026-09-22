@@ -112,40 +112,14 @@ create table if not exists pf_sync_log (
 
 -- ---------------------------------------------------------------- categorise
 -- exact rule -> longest prefix rule either way round (bank e-mails truncate the merchant) -> contains rule
-create or replace function pf_categorise(p_desc text, p_account int default null) returns int
-language plpgsql stable security definer set search_path = public as $$
-declare n text := pf_norm(p_desc); r int;
-begin
-  if n = '' then return null; end if;
-  select category_id into r from pf_rules
-   where match = 'exact' and pattern = n and (account_id is null or account_id = p_account)
-   order by account_id nulls last limit 1;
-  if r is not null then return r; end if;
-  -- keyword rules ('discbank', 'afriforum', …) are deliberate, so they come before any fuzzy matching
-  select category_id into r from pf_rules
-   where match = 'contains' and n like '%' || pattern || '%'
-   order by length(pattern) desc limit 1;
-  if r is not null then return r; end if;
-  -- FNB words a payment by HOW it was made ("FNB App Payment To …", "Payshap Account Off-Us …"): everything that
-  -- starts that way shares a long stem but has nothing else in common, so fuzzy matching is off for those.
-  if n ~ '^(fnbapp|internetpmt|internettrf|payshapaccount|sendmoneyapp|magtape|debicheck|scheduledtrf|scheduledpmt|fnbobpmt|rtccredit|eftpayment)' then
-    return null;
+-- (the categoriser itself lives in 014_astron_coffee.sql — amount-aware; this stub only exists for a fresh install)
+do $c$ begin
+  if not exists (select 1 from pg_proc where proname = 'pf_categorise') then
+    create function pf_categorise(p_desc text, p_account int default null, p_amount numeric default null) returns int
+    language sql stable security definer set search_path = public as $f$
+      select category_id from pf_rules where match = 'exact' and pattern = pf_norm(p_desc) limit 1 $f$;
   end if;
-  select category_id into r from pf_rules
-   where match in ('exact','prefix') and length(pattern) >= 8 and length(n) >= 8
-     and (n like pattern || '%' or pattern like n || '%')
-     and (account_id is null or account_id = p_account)
-   order by length(pattern) desc limit 1;
-  if r is not null then return r; end if;
-  -- shorter shared stem: first 12 characters (e.g. 'liquorshopjukskei…' vs another branch reference)
-  if length(n) >= 12 then
-    select category_id into r from pf_rules
-     where match in ('exact','prefix') and pattern like left(n, 12) || '%'
-       and (account_id is null or account_id = p_account)
-     group by category_id order by count(*) desc limit 1;
-  end if;
-  return r;
-end $$;
+end $c$;
 
 -- fallback bucket: unrecognised money OUT → Uncategorised (expense); unrecognised money IN → Income > Uncategorised income
 -- (a credit parked in an expense bucket would silently net off spending)
@@ -201,7 +175,7 @@ begin
         update pf_transactions x set status = 'cleared', description = ds,
                txn_time = coalesce(x.txn_time, t),
                category_id = case when x.category_locked or x.category_id is distinct from pf_uncategorised_id(a)
-                                  then x.category_id else coalesce(pf_categorise(ds, acc), x.category_id) end
+                                  then x.category_id else coalesce(pf_categorise(ds, acc, a), x.category_id) end
          where id = hit;
         cleared := cleared + 1; continue;
       end if;
@@ -220,7 +194,7 @@ begin
       end if;
     end if;
 
-    cat := coalesce(pf_categorise(ds, acc), nullif(r->>'category_id','')::int, pf_uncategorised_id(a));
+    cat := coalesce(pf_categorise(ds, acc, a), nullif(r->>'category_id','')::int, pf_uncategorised_id(a));
     insert into pf_transactions (account_id, txn_date, txn_time, description, amount, category_id, source, source_ref, status, balance_after)
     values (acc, d, t, ds, a, cat, p_source, r->>'ref',
             case when p_source = 'statement' then 'cleared' else 'pending' end,

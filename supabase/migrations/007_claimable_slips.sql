@@ -83,7 +83,7 @@ begin
     values (acc, coalesce(d, current_date), nullif(p->>'time','')::time, coalesce(nullif(trim(p->>'merchant'), ''), 'Slip'),
             -round((p->>'total')::numeric + tip, 2),
             case when claim then pf_claim_category_id()
-                 else coalesce(nullif(p->>'category_id','')::int, pf_categorise(p->>'merchant', acc), pf_uncategorised_id()) end,
+                 else coalesce(nullif(p->>'category_id','')::int, pf_categorise(p->>'merchant', acc, -round((p->>'total')::numeric + tip, 2)), pf_uncategorised_id()) end,
             claim, 'slip', 'pending', sid)
     returning id into tid;
     update pf_slips set status = 'matched' where id = sid;
