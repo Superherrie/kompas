@@ -59,7 +59,7 @@ end $$;
 create or replace function pf_file_slip(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare sid bigint; tid bigint; acc int; made boolean := false; pm text := coalesce(p->>'payment_method', 'unknown');
-        d date := nullif(p->>'date','')::date; tip numeric := coalesce(nullif(p->>'tip','')::numeric, 0);
+        d date := pf_sane_slip_date(nullif(p->>'date','')::date); tip numeric := coalesce(nullif(p->>'tip','')::numeric, 0);
         claim boolean := coalesce((p->>'claimable')::boolean, false);
 begin
   if not pf_is_member() then raise exception 'not a household member'; end if;
