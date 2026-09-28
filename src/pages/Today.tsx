@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useFinance } from '../context/FinanceContext'
@@ -46,8 +46,17 @@ export default function Today() {
       if (r.month === month) e.now -= r.total; else if (usualMonths.includes(r.month)) e.usual -= r.total / 6
       m.set(r.cat_id, e)
     }
-    return [...m.values()].filter(e => e.now > 0 || (e.budget ?? 0) > 0).sort((a, b) => b.now - a.now).slice(0, 8)
+    return [...m.values()].filter(e => e.now > 0 || (e.budget ?? 0) > 0).sort((a, b) => b.now - a.now)
   }, [monthly, month, budgetFor])
+  // the R-over figure on the ring, explained: each category's over/(under) against its own budget. Categories
+  // without a budget line count in full. The sum equals spent − budget when the category budgets add up to the
+  // discretionary budget; any remainder is shown so the figures always reconcile.
+  const explain = useMemo(() => {
+    const rows = leaks.map(l => ({ id: l.id, name: l.name, diff: l.now - (l.budget ?? 0), budget: l.budget })).filter(r => Math.abs(r.diff) >= 1).sort((a, b) => b.diff - a.diff)
+    const catBudget = leaks.reduce((s, l) => s + (l.budget ?? 0), 0)
+    return { rows, unallocated: budget - catBudget }
+  }, [leaks, budget])
+  const [showWhy, setShowWhy] = useState(false)
   const leakMax = Math.max(1, ...leaks.map(l => Math.max(l.now, l.budget ?? l.usual)))
 
   const hour = new Date().getHours()
@@ -73,6 +82,19 @@ export default function Today() {
             <Stat label="Today" value={rand0(spentToday)} hint={left >= 0 && spentToday > perDay ? 'above daily pace' : 'so far'} warn={left >= 0 && spentToday > perDay} />
             <Stat label="On track for" value={rand0(projected)} hint={projected > budget ? `${rand0(projected - budget)} over` : 'inside budget'} warn={projected > budget} />
           </div>
+          <button className="mt-4 text-sm font-semibold text-pine" onClick={() => setShowWhy(w => !w)}>{showWhy ? 'Hide the breakdown' : left < 0 ? `Why ${rand0(-left)} over?` : 'Where does it stand by category?'}</button>
+          {showWhy && (
+            <div className="w-full mt-2 text-left text-sm">
+              {explain.rows.map(r => (
+                <Link key={r.id} to={`/categories/cat/${r.id}?m=${month}`} className="flex justify-between gap-3 py-1.5 border-t border-line hover:text-pine">
+                  <span className="truncate">{r.name}<span className="text-xs text-muted ml-1.5">{r.budget !== undefined ? `budget ${rand0(r.budget)}` : 'no budget line'}</span></span>
+                  <span className={`num font-semibold whitespace-nowrap ${r.diff > 0 ? 'text-bad' : 'text-good'}`}>{r.diff > 0 ? '+' : '−'}{rand0(r.diff)}</span>
+                </Link>
+              ))}
+              {Math.abs(explain.unallocated) >= 1 && <div className="flex justify-between gap-3 py-1.5 border-t border-line text-muted"><span>Budget not allocated to a category</span><span className="num whitespace-nowrap">{explain.unallocated > 0 ? '−' : '+'}{rand0(explain.unallocated)}</span></div>}
+              <div className="flex justify-between gap-3 py-1.5 border-t border-ink/40 font-semibold"><span>{left < 0 ? 'Over budget' : 'Left'}</span><span className={`num ${left < 0 ? 'text-bad' : 'text-good'}`}>{rand0(left)}</span></div>
+            </div>
+          )}
         </Card>
 
         <Card className="lg:col-span-3" title="Spending pace" sub="Cumulative discretionary spend, day by day">
@@ -98,7 +120,7 @@ export default function Today() {
         <Card className="lg:col-span-2" title="Where it’s going" sub="Discretionary categories against this month’s budget (tick = budget)">
           {leaks.length === 0 && <p className="text-sm text-muted">No discretionary spend yet this month.</p>}
           <div className="space-y-3.5">
-            {leaks.map(l => (
+            {leaks.slice(0, 8).map(l => (
               <Link key={l.id} to={`/categories/cat/${l.id}?m=${month}`} className="block group">
                 <div className="flex justify-between text-sm mb-1">
                   <span className="font-medium group-hover:text-pine">{l.name}</span>
