@@ -10,6 +10,7 @@ const PATHS: Record<string, string> = {
   briefcase: 'M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m-11 0h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V8a1 1 0 011-1zm-1 6h18',
   more: 'M5 12h.01M12 12h.01M19 12h.01M5 6h.01M12 6h.01M19 6h.01M5 18h.01M12 18h.01M19 18h.01',
   table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
+  home: 'M4 11l8-7 8 7M6 10v9h12v-9M10 19v-5h4v5',
   receipt: 'M6 3h12v18l-3-2-3 2-3-2-3 2V3zm3 5h6m-6 4h6',
   left: 'M15 5l-7 7 7 7', right: 'M9 5l7 7-7 7', close: 'M6 6l12 12M18 6L6 18', check: 'M5 12l5 5 9-10',
   search: 'M11 4a7 7 0 100 14 7 7 0 000-14zm9 16l-4-4', clock: 'M12 7v5l3 2m-3-11a9 9 0 100 18 9 9 0 000-18z',

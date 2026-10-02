@@ -7,6 +7,7 @@ const NAV = [
   { to: '/', label: 'Today', icon: 'today', end: true },
   { to: '/overview', label: 'Overview', icon: 'chart' },
   { to: '/statement', label: 'Income Statement', icon: 'table' },
+  { to: '/rental', label: 'Rental Property', icon: 'home' },
   { to: '/categories', label: 'Categories', icon: 'layers' },
   { to: '/transactions', label: 'Transactions', icon: 'list' },
   { to: '/slips', label: 'Slips', icon: 'receipt' },
@@ -15,8 +16,8 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
 // phone tab bar: the three everyday screens, the camera in the middle, and "More" for everything else
-const TABS = [NAV[0], NAV[3], null, NAV[4]]
-const MORE = [NAV[1], NAV[2], NAV[5], NAV[6], NAV[7], NAV[8]]
+const TABS = [NAV[0], NAV[4], null, NAV[5]]
+const MORE = [NAV[1], NAV[2], NAV[3], NAV[6], NAV[7], NAV[8], NAV[9]]
 
 export default function Layout() {
   const { member, signOut } = useAuth()
