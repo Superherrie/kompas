@@ -71,7 +71,7 @@ export function parseFnb(id: string, sent: string, raw: string): (Parsed | { ski
     let description: string;
     if (/t\/fer/.test(verb)) description = `${/sched/i.test(channel) ? "Scheduled Trf To" : "FNB App Transfer To"} ${toAcc ?? ref ?? "own account"}`;
     else if (ref && /^send\s/i.test(ref)) description = `Send Money App Dr ${ref}`;
-    else if (/eft|debit order|debicheck/i.test(channel)) description = `Magtape Debit ${ref ?? channel}`;
+    else if (/eft|debit order|debicheck/i.test(channel)) description = `Magtape ${credit ? "Credit" : "Debit"} ${ref ?? channel}`;
     else if (/purchase|card|pos/i.test(`${verb} ${channel}`)) description = ref ?? channel;
     else description = `FNB App Payment To ${ref ?? rest.split("@")[0].trim()}`;
 
