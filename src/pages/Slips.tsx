@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useFinance } from '../context/FinanceContext'
 import { getSetting, useLoad } from '../lib/data'
 import { readSlip, type SlipDraft } from '../lib/slipOcr'
+import { downloadSlip } from '../lib/slipFile'
 import { dayLabel, rand, today } from '../lib/format'
 import { Card } from '../components/Charts'
 import { CategorySelect, Sheet } from '../components/Txns'
@@ -152,6 +153,8 @@ export default function Slips() {
 function SlipSheet({ slip, onClose, onChanged }: { slip: Slip; onClose: () => void; onChanged: () => void }) {
   const [img, setImg] = useState<string>()
   useEffect(() => { if (slip.image_path) void supabase.storage.from('pf-slips').createSignedUrl(slip.image_path, 600).then(({ data }) => setImg(data?.signedUrl)) }, [slip.image_path])
+  const [saving, setSaving] = useState(false)
+  async function download() { setSaving(true); try { await downloadSlip(slip) } catch (e) { alert((e as Error).message) } finally { setSaving(false) } }
   // tap again to undo
   async function stamp(col: 'claimed_on' | 'repaid_on', current: string | null) { await supabase.rpc('pf_stamp_claim', { p_txn: null, p_slip: slip.id, p_what: col === 'claimed_on' ? 'claimed' : 'repaid', p_date: current ? null : today() }); onChanged() }
   async function rematch() { await supabase.rpc('pf_match_slip', { p_slip: slip.id }); onChanged() }
@@ -169,6 +172,7 @@ function SlipSheet({ slip, onClose, onChanged }: { slip: Slip; onClose: () => vo
         {slip.tip ? <div className="flex justify-between border-t border-line mt-1 pt-1"><span>Tip</span><span className="num">{rand(+slip.tip)}</span></div> : null}
       </div>
       {img && <img src={img} alt="Slip" className="rounded-2xl w-full mb-3" />}
+      {slip.image_path && <button className="btn btn-ghost w-full mb-3" disabled={saving} onClick={() => void download()}><Icon name="download" />{saving ? 'Fetching…' : 'Download slip'}</button>}
       <label className={`flex items-center gap-2.5 rounded-xl border p-3 mb-3 cursor-pointer ${slip.claimable ? 'border-pine bg-pine/10' : 'border-line'}`}>
         <input type="checkbox" className="w-5 h-5 accent-[var(--pine)]" checked={slip.claimable} onChange={e => void supabase.rpc('pf_set_slip_claimable', { p_slip: slip.id, p_claimable: e.target.checked }).then(onChanged)} />
         <span className="text-sm font-semibold">Claim back from work</span>

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { addMonths, dayLabel, monthLabel, rand } from '../lib/format'
 import type { Category, Slip, Txn } from '../lib/types'
 import Icon from './Icon'
+import { downloadSlip } from '../lib/slipFile'
 
 export function Amount({ value, className = '' }: { value: number; className?: string }) {
   return <span className={`num font-semibold ${value > 0 ? 'text-good' : ''} ${className}`}>{value > 0 ? '+' : ''}{rand(value)}</span>
@@ -143,7 +144,12 @@ function TxnSheet({ t, categories, onClose, onSaved }: { t: Txn; categories: Cat
         <div className="mt-4 rounded-2xl bg-surface-2 p-3 text-sm">
           <p className="font-semibold mb-1 flex items-center gap-1.5"><Icon name="receipt" size={16} />Slip · {slip.merchant}</p>
           {slip.items?.map((i, k) => <div key={k} className="flex justify-between text-muted"><span className="truncate pr-3">{i.qty && i.qty !== 1 ? `${i.qty} × ` : ''}{i.name}</span><span className="num">{i.amount === null ? '' : rand(i.amount)}</span></div>)}
-          {img && <a href={img} target="_blank" rel="noreferrer" className="text-pine font-semibold block mt-2">View photo</a>}
+          {img && (
+            <div className="flex gap-4 mt-2">
+              <a href={img} target="_blank" rel="noreferrer" className="text-pine font-semibold">View photo</a>
+              <button className="text-pine font-semibold flex items-center gap-1" onClick={() => void downloadSlip(slip).catch(e => setError((e as Error).message))}><Icon name="download" size={16} />Download</button>
+            </div>
+          )}
         </div>
       )}
       <p className="text-xs text-muted mt-3">Source: {t.source}{t.status === 'pending' ? ' — waiting for the bank statement to confirm it' : ''}</p>
