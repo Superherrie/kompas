@@ -20,8 +20,16 @@ export interface Parsed { ref: string; date: string; time: string | null; descri
 export function parseMail(id: string, sent: string, raw: string): Parsed | { skip: string } {
   const text = raw.replace(/\s+/g, " ").trim();
   if (/\b(failed|declined|unsuccessful|reversed authorisation)\b/i.test(text.slice(0, 80))) return { skip: "no money moved" };
-  const amt = text.match(/R\s?(\d[\d ,]*\.\d{2})/);
-  if (!amt) return { skip: "no amount" };
+  // the amount sits before "From/To Single Facility"; after that come only the card, the time and the AVAILABLE BALANCE
+  const cut = text.search(/\b(From|To) Single Facility\b|Available balance:/i);
+  const headPart = cut >= 0 ? text.slice(0, cut) : text;
+  const amt = headPart.match(/R\s?(\d[\d ,]*\.\d{2})/);
+  if (!amt) {
+    // "Card payment XERO GLOBAL … – USD 57.00 From Single Facility …": a foreign-currency payment carries no rand amount
+    // (the rand figure only exists once the bank has converted it), so the statement / Smart Search export brings it in
+    const fx = headPart.match(/\b([A-Z]{3})\s?(\d[\d ,]*\.\d{2})/);
+    return { skip: fx ? `foreign currency (${fx[1]} ${fx[2]}) — waits for the statement` : "no amount" };
+  }
   const head = text.slice(0, amt.index).replace(/[–—-]\s*$/, "").trim();          // "Card payment <merchant>" | "Debit order"
   const kind = (head.match(/^(card payment|card purchase|debit order|payment received|payment|transfer|cash withdrawal|atm withdrawal|deposit|refund|reversal|eft|fee)/i)?.[0] ?? head.split(" ").slice(0, 2).join(" ")).toLowerCase();
   const reference = text.match(/Reference:\s*(.+?)\s+(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,/i)?.[1];
