@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFinance } from '../context/FinanceContext'
+import { getTxns, useLoad } from '../lib/data'
 import { addMonths, monthLabel, rand0, thisMonth } from '../lib/format'
 import { Card } from '../components/Charts'
+import { Sheet, TxnList } from '../components/Txns'
 import Icon from '../components/Icon'
 
 type Row = { id: number; name: string; disc?: boolean; vals: number[] }
 type Block = { id: number; name: string; color: string | null; vals: number[]; budget?: number; subs: Row[] }
+/** a figure on the statement that was tapped: which category (or sub-category) and which accounting month */
+type Cell = { name: string; month: string; catId?: number; subId?: number }
 const sum = (v: number[]) => v.reduce((s, x) => s + x, 0)
 
 /** The month-by-month income statement: income by source, expenses by category (expand for sub-categories),
@@ -17,6 +21,7 @@ export default function IncomeStatement() {
   const [span, setSpan] = useState(6)
   const [endMonth, setEndMonth] = useState(thisMonth())
   const [open, setOpen] = useState<Set<number>>(new Set())
+  const [cell, setCell] = useState<Cell>()
   const months = useMemo(() => Array.from({ length: span }, (_, i) => addMonths(endMonth, i - span + 1)), [endMonth, span])
 
   const { income, expense, totals } = useMemo(() => {
@@ -89,19 +94,37 @@ export default function IncomeStatement() {
             </thead>
             <tbody>
               <Section label="Income" />
-              {income.map(b => <BlockRows key={b.id} b={b} months={months} open={open.has(b.id)} toggle={() => toggle(b.id)} />)}
+              {income.map(b => <BlockRows key={b.id} b={b} months={months} open={open.has(b.id)} toggle={() => toggle(b.id)} onCell={setCell} />)}
               <TotalRow label="Total income" vals={totals.income} tone="good" />
               <Section label="Expenses" />
-              {expense.map(b => <BlockRows key={b.id} b={b} months={months} open={open.has(b.id)} toggle={() => toggle(b.id)} />)}
+              {expense.map(b => <BlockRows key={b.id} b={b} months={months} open={open.has(b.id)} toggle={() => toggle(b.id)} onCell={setCell} />)}
               <TotalRow label="Total expenses" vals={totals.expense} />
               <TotalRow label="of which discretionary" vals={totals.disc} muted />
               <TotalRow label="Net for the month" vals={totals.net} net />
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-muted px-4 py-3">* {monthLabel(thisMonth())} is still running. Tap a category for its sub-categories; tap a sub-category to open its transactions. A red figure is above that category’s budget for the month.</p>
+        <p className="text-xs text-muted px-4 py-3">* {monthLabel(thisMonth())} is still running. Tap a category name for its sub-categories; tap any figure to see the transactions behind it. A red figure is above that category’s budget for the month.</p>
       </Card>
+      {cell && <CellSheet cell={cell} onClose={() => setCell(undefined)} />}
     </div>
+  )
+}
+
+/** the transactions behind one figure on the statement — same list as the Transactions page, so a line can be re-filed from here */
+function CellSheet({ cell, onClose }: { cell: Cell; onClose: () => void }) {
+  const { categories, reload: reloadFinance } = useFinance()
+  const { data: txns, loading, reload } = useLoad(() => getTxns({ month: cell.month, catId: cell.catId, subId: cell.subId }), [cell.month, cell.catId, cell.subId])
+  const total = (txns ?? []).reduce((s, t) => s + t.amount, 0)
+  return (
+    <Sheet title={`${cell.name} · ${monthLabel(cell.month)}`} onClose={onClose}>
+      {loading && !txns ? <p className="text-sm text-muted py-6 text-center">Loading…</p> : (
+        <>
+          <p className="text-sm text-muted mb-1">{txns?.length ?? 0} transaction{txns?.length === 1 ? '' : 's'} · <span className="num font-semibold text-ink">{rand0(total)}</span></p>
+          <TxnList txns={txns ?? []} categories={categories} onChanged={() => { void reload(); void reloadFinance() }} dayTotals={false} claimTick={false} />
+        </>
+      )}
+    </Sheet>
   )
 }
 
@@ -109,15 +132,25 @@ function Section({ label }: { label: string }) {
   return <tr><td colSpan={99} className="pt-4 pb-1 pl-4 text-[11px] font-semibold uppercase tracking-wide text-muted font-sans">{label}</td></tr>
 }
 
-function BlockRows({ b, months, open, toggle }: { b: Block; months: string[]; open: boolean; toggle: () => void }) {
+/** a figure that opens its transactions when tapped; empty months stay plain */
+function Figure({ v, onClick, className = '' }: { v: number; onClick: () => void; className?: string }) {
+  if (!v) return <td className="text-right px-2 whitespace-nowrap text-muted">–</td>
+  return (
+    <td className={`text-right whitespace-nowrap ${className}`}>
+      <button onClick={onClick} title="See the transactions" className="w-full text-right px-2 py-0.5 rounded-md hover:bg-pine/10 hover:text-pine focus:outline-none focus:ring-1 focus:ring-pine/40">{rand0(v)}</button>
+    </td>
+  )
+}
+
+function BlockRows({ b, months, open, toggle, onCell }: { b: Block; months: string[]; open: boolean; toggle: () => void; onCell: (c: Cell) => void }) {
   const last = months.length - 1
   return (
     <>
-      <tr className="border-t border-line cursor-pointer hover:bg-surface-2" onClick={toggle}>
-        <td className="py-2 pl-4 pr-2 font-sans font-medium sticky left-0 bg-surface">
+      <tr className="border-t border-line hover:bg-surface-2">
+        <td className="py-2 pl-4 pr-2 font-sans font-medium sticky left-0 bg-surface cursor-pointer" onClick={toggle}>
           <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full shrink-0" style={{ background: b.color ?? 'var(--muted)' }} />{b.name}<Icon name="right" size={13} className={`text-muted transition ${open ? 'rotate-90' : ''}`} /></span>
         </td>
-        {b.vals.map((v, k) => <td key={k} className={`text-right px-2 whitespace-nowrap ${b.budget !== undefined && k === last && v > b.budget ? 'text-bad font-semibold' : ''}`}>{v ? rand0(v) : <span className="text-muted">–</span>}</td>)}
+        {b.vals.map((v, k) => <Figure key={k} v={v} onClick={() => onCell({ name: b.name, month: months[k], catId: b.id })} className={b.budget !== undefined && k === last && v > b.budget ? 'text-bad font-semibold' : ''} />)}
         <td className="text-right pl-2 pr-4 text-muted whitespace-nowrap">{rand0(sum(b.vals) / months.length)}</td>
       </tr>
       {open && b.subs.map(s => (
@@ -125,7 +158,7 @@ function BlockRows({ b, months, open, toggle }: { b: Block; months: string[]; op
           <td className="py-1.5 pl-10 pr-2 font-sans sticky left-0 bg-surface">
             <Link to={`/categories/sub/${s.id}?m=${months[last]}`} className="hover:text-pine">{s.name}{s.disc && <span className="ml-1.5 text-[10px] uppercase tracking-wide">disc</span>}</Link>
           </td>
-          {s.vals.map((v, k) => <td key={k} className="text-right px-2 whitespace-nowrap">{v ? rand0(v) : '–'}</td>)}
+          {s.vals.map((v, k) => <Figure key={k} v={v} onClick={() => onCell({ name: `${b.name} › ${s.name}`, month: months[k], subId: s.id })} />)}
           <td className="text-right pl-2 pr-4 whitespace-nowrap">{rand0(sum(s.vals) / months.length)}</td>
         </tr>
       ))}
