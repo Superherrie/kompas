@@ -46,7 +46,9 @@ const rows = [];
 for (const l of lines) for (const name of l.names) {
   const parent = cats.find(c => c.parent_id === null && c.name === name);
   if (!parent) { console.warn(`! no category called "${name}" — skipped`); continue; }
-  await must(sb.from('pf_categories').update({ discretionary: l.disc }).eq('parent_id', parent.id), name);
+  // sub-categories Herman flagged by hand, against their parent's workbook flag (13 Oct 2026: Road to Comrades is watched)
+  const HAND_FLAGGED = { 'Road to Comrades': true };
+  await must(sb.from('pf_categories').update({ discretionary: l.disc }).eq('parent_id', parent.id).not('name', 'in', `(${Object.keys(HAND_FLAGGED).map(n => `"${n}"`).join(',')})`), name);
   // a bundled line's budget sits on its first category only
   for (const b of l.budgets) rows.push({ category_id: parent.id, month: b.month, amount: name === l.names[0] ? Math.round(b.amount * 100) / 100 : 0, note: l.note });
   await must(sb.from('pf_categories').update({ budget: name === l.names[0] ? l.budgets[0].amount : 0 }).eq('id', parent.id), name);
