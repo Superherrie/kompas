@@ -100,8 +100,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const url = Deno.env.get("SUPABASE_URL")!;
-    const token = Deno.env.get("PF_INGEST_TOKEN");
-    let ok = !!token && req.headers.get("x-ingest-token") === token;
+    // two tokens: the PC's scheduled task and the claude.ai cloud routine, so either can be revoked on its own
+    const given = req.headers.get("x-ingest-token");
+    let ok = !!given && [Deno.env.get("PF_INGEST_TOKEN"), Deno.env.get("PF_INGEST_TOKEN_CLOUD")].some((t) => !!t && t === given);
     if (!ok && req.headers.get("Authorization")) {
       const asUser = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization")! } } });
       ok = !!(await asUser.rpc("pf_is_member")).data;
