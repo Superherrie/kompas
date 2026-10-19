@@ -17,23 +17,28 @@ export interface Parsed { ref: string; date: string; time: string | null; descri
  *  Card payment Astron Jukskei Park Rand – R 51.00 From Single Facility Card ending ***5302 Monday, 21 September at 08:02 Available balance: R 3,024.40 …
  *  Debit order R 1,850.94 From Single Facility Reference: DISCLIFE 5130634382-346922274 Friday, 4 September at 22:11 Available balance: R 5,394.83 …
  *  Debit order failed From Single Facility Insufficient funds Reference: …            (no money moved → ignored) */
-export function parseMail(id: string, sent: string, raw: string): Parsed | { skip: string } {
+export function parseMail(id: string, sent: string, raw: string, rates: Record<string, number> = {}): Parsed | { skip: string } {
   const text = raw.replace(/\s+/g, " ").trim();
   if (/\b(failed|declined|unsuccessful|reversed authorisation)\b/i.test(text.slice(0, 80))) return { skip: "no money moved" };
   // the amount sits before "From/To Single Facility"; after that come only the card, the time and the AVAILABLE BALANCE
   const cut = text.search(/\b(From|To) Single Facility\b|Available balance:/i);
   const headPart = cut >= 0 ? text.slice(0, cut) : text;
-  const amt = headPart.match(/R\s?(\d[\d ,]*\.\d{2})/);
+  let amt = headPart.match(/R\s?(\d[\d ,]*\.\d{2})/);
+  let rand = amt ? money(amt[1]) : NaN, fxTag = "";
   if (!amt) {
-    // "Card payment XERO GLOBAL … – USD 57.00 From Single Facility …": a foreign-currency payment carries no rand amount
-    // (the rand figure only exists once the bank has converted it), so the statement / Smart Search export brings it in
+    // "Card payment XERO GLOBAL … – USD 57.00 From Single Facility …": a foreign-currency payment carries no rand amount.
+    // With an agreed rate in pf_settings (fx_usd_zar) the line goes in as an estimate, worded "… ~ USD 57.00 @ 16.70";
+    // the statement later corrects the amount (017_fx_estimates.sql). Without a rate it waits for the statement.
     const fx = headPart.match(/\b([A-Z]{3})\s?(\d[\d ,]*\.\d{2})/);
-    return { skip: fx ? `foreign currency (${fx[1]} ${fx[2]}) — waits for the statement` : "no amount" };
+    if (!fx) return { skip: "no amount" };
+    const rate = rates[fx[1]];
+    if (!rate) return { skip: `foreign currency (${fx[1]} ${fx[2]}) — no rate set, waits for the statement` };
+    amt = fx; rand = Math.round(money(fx[2]) * rate * 100) / 100; fxTag = ` ~ ${fx[1]} ${money(fx[2]).toFixed(2)} @ ${rate}`;
   }
-  const head = text.slice(0, amt.index).replace(/[–—-]\s*$/, "").trim();          // "Card payment <merchant>" | "Debit order"
+  const head = text.slice(0, amt.index).replace(/\+?\s*[–—-]\s*$/, "").trim();     // "Card payment <merchant>" | "Debit order"
   const kind = (head.match(/^(card payment|card purchase|debit order|payment received|payment|transfer|cash withdrawal|atm withdrawal|deposit|refund|reversal|eft|fee)/i)?.[0] ?? head.split(" ").slice(0, 2).join(" ")).toLowerCase();
   const reference = text.match(/Reference:\s*(.+?)\s+(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,/i)?.[1];
-  const description = (head.slice(kind.length).trim() || reference || head || "Discovery transaction").trim();
+  const description = (head.slice(kind.length).trim() || reference || head || "Discovery transaction").trim() + fxTag;
 
   // the mail says "Monday, 21 September at 08:02" (SAST, no year) — take the year from when it was sent
   const sentSast = new Date(new Date(sent).getTime() + 2 * 3600_000);
@@ -52,7 +57,7 @@ export function parseMail(id: string, sent: string, raw: string): Parsed | { ski
   const opening = text.slice(0, 120);
   const credit = (/incoming|received|deposit|refund|reversal|paid to you|credited/i.test(kind + " " + head) || /to single facility/i.test(opening)) && !/from single facility/i.test(opening);
   const bal = text.match(/Available balance:\s*R\s?(-?\d[\d ,]*\.\d{2})/i);
-  return { ref: id, date, time, description, amount: (credit ? 1 : -1) * money(amt[1]), balance: bal ? money(bal[1]) : null, kind };
+  return { ref: id, date, time, description, amount: (credit ? 1 : -1) * rand, balance: bal ? money(bal[1]) : null, kind: fxTag ? `${kind} (fx)` : kind };
 }
 
 const MON3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -111,18 +116,23 @@ Deno.serve(async (req) => {
 
     const { messages, dry_run = false } = await req.json();
     if (!Array.isArray(messages)) return json({ error: "messages[] required" }, 400);
+    const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    // agreed conversion rates for foreign-currency card payments: pf_settings fx_usd_zar, fx_eur_zar, …
+    const rates: Record<string, number> = {};
+    for (const s of (await admin.from("pf_settings").select("key,value").like("key", "fx_%_zar")).data ?? []) {
+      const n = parseFloat(String(s.value)); if (n > 0) rates[s.key.slice(3, 6).toUpperCase()] = n;
+    }
     // the bank is read off the mail itself: FNB inContact starts "FNB:-)", everything else is Discovery's wording
     const rows: Record<string, Parsed[]> = { Discovery: [], FNB: [] }, skipped: { id: string; why: string }[] = [];
     for (const m of messages) {
       if (!m?.id || !m?.text) { skipped.push({ id: String(m?.id), why: "id and text required" }); continue; }
       const sent = m.sent ?? new Date().toISOString(), text = String(m.text);
       const fnb = /FNB\s*:-\)|inContact/i.test(text) || /fnb\.co\.za/i.test(String(m.from ?? ""));
-      for (const p of fnb ? parseFnb(String(m.id), sent, text) : [parseMail(String(m.id), sent, text)]) {
+      for (const p of fnb ? parseFnb(String(m.id), sent, text) : [parseMail(String(m.id), sent, text, rates)]) {
         if ("skip" in p) skipped.push({ id: m.id, why: p.skip }); else rows[fnb ? "FNB" : "Discovery"].push(p);
       }
     }
     if (dry_run) return json({ rows, skipped });
-    const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const total = { inserted: 0, cleared: 0, skipped: 0 };
     for (const [account, list] of Object.entries(rows)) {
       if (!list.length) continue;

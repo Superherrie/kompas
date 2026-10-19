@@ -2,7 +2,7 @@
 
 Later files redefine functions from earlier ones. A fresh install, and any re-run, must go in this order:
 
-    001 002 003 004 005 006 008 009 010 011 012 014 016 013 007 015
+    001 002 003 004 005 006 008 009 010 011 012 014 016 013 007 015 017
 
 - 013 and 015 both define `pf_find_payment` → 015 must be last of the two.
 - 007 and 013 both define `pf_match_slip` → 007 (claimable-aware) must come after 013.
