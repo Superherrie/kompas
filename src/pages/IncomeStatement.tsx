@@ -10,7 +10,7 @@ import Icon from '../components/Icon'
 type Row = { id: number; name: string; disc?: boolean; vals: number[] }
 type Block = { id: number; name: string; color: string | null; vals: number[]; budget?: number; subs: Row[] }
 /** a figure on the statement that was tapped: which category (or sub-category) and which accounting month */
-type Cell = { name: string; month: string; catId?: number; subId?: number }
+export type Cell = { name: string; month: string; catId?: number; subId?: number }
 const sum = (v: number[]) => v.reduce((s, x) => s + x, 0)
 
 /** The month-by-month income statement: income by source, expenses by category (expand for sub-categories),
@@ -112,7 +112,7 @@ export default function IncomeStatement() {
 }
 
 /** the transactions behind one figure on the statement — same list as the Transactions page, so a line can be re-filed from here */
-function CellSheet({ cell, onClose }: { cell: Cell; onClose: () => void }) {
+export function CellSheet({ cell, onClose }: { cell: Cell; onClose: () => void }) {
   const { categories, reload: reloadFinance } = useFinance()
   const { data: txns, loading, reload } = useLoad(() => getTxns({ month: cell.month, catId: cell.catId, subId: cell.subId }), [cell.month, cell.catId, cell.subId])
   const total = (txns ?? []).reduce((s, t) => s + t.amount, 0)
@@ -128,7 +128,7 @@ function CellSheet({ cell, onClose }: { cell: Cell; onClose: () => void }) {
   )
 }
 
-function Section({ label }: { label: string }) {
+export function Section({ label }: { label: string }) {
   return <tr><td colSpan={99} className="pt-4 pb-1 pl-4 text-[11px] font-semibold uppercase tracking-wide text-muted font-sans">{label}</td></tr>
 }
 

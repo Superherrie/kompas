@@ -7,6 +7,7 @@ const NAV = [
   { to: '/', label: 'Today', icon: 'today', end: true },
   { to: '/overview', label: 'Overview', icon: 'chart' },
   { to: '/statement', label: 'Income Statement', icon: 'table' },
+  { to: '/budget', label: 'Budget', icon: 'target' },
   { to: '/rental', label: 'Rental Property', icon: 'home' },
   { to: '/categories', label: 'Categories', icon: 'layers' },
   { to: '/transactions', label: 'Transactions', icon: 'list' },
@@ -16,8 +17,9 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
 // phone tab bar: the three everyday screens, the camera in the middle, and "More" for everything else
-const TABS = [NAV[0], NAV[4], null, NAV[5]]
-const MORE = [NAV[1], NAV[2], NAV[3], NAV[6], NAV[7], NAV[8], NAV[9]]
+const byPath = (p: string) => NAV.find(n => n.to === p)!
+const TABS = [byPath('/'), byPath('/categories'), null, byPath('/transactions')]
+const MORE = NAV.filter(n => !TABS.includes(n))
 
 export default function Layout() {
   const { member, signOut } = useAuth()
