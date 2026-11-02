@@ -37,6 +37,21 @@ for (const l of lines) { const varies = l.budgets.slice(1).some(b => b.amount !=
 const discBudget = lines.filter(l => l.disc).reduce((s, l) => s + l.budgets[0].amount, 0);
 console.table(lines.map(l => ({ category: l.names.join(' + '), discretionary: l.disc ? 'YES' : 'no', ...Object.fromEntries(l.budgets.map(b => [b.month, b.amount])) })));
 console.log(`Discretionary budget: R${discBudget}`);
+
+// the INCOME block above the expenses: one row per source, budgeted on the matching Income sub-category
+// (the sheet's label up to the bracket → the sub-category name; "Sundry income" has no line of its own)
+const INCOME_ALIAS = { 'Sundry income': 'Interest Earned' };
+const iFrom = grid.findIndex(r => r?.[0] === 'INCOME'), iTo = grid.findIndex(r => r?.[0] === 'TOTAL INCOME');
+const incomeLines = iFrom < 0 || iTo < 0 ? [] : grid.slice(iFrom + 1, iTo).filter(r => r?.[0]).map(r => {
+  const label = String(r[0]).replace(/\s*\(.*$/, '').trim();
+  const budgets = monthCols.map(({ col, month }, i) => ({ month, amount: r[col] ?? (i === 0 ? 0 : null) }));
+  const varies = budgets.slice(1).some(b => b.amount !== null && b.amount !== budgets[0].amount);
+  return { sub: INCOME_ALIAS[label] ?? label, budgets: budgets.map(b => ({ ...b, amount: b.amount ?? (varies ? 0 : budgets[0].amount) })) };
+});
+if (incomeLines.length) {
+  console.table(incomeLines.map(l => ({ income: l.sub, ...Object.fromEntries(l.budgets.map(b => [b.month, b.amount])) })));
+  console.log(`Income budget: R${incomeLines.reduce((s, l) => s + l.budgets[0].amount, 0)}`);
+} else console.log('(no INCOME block found in the sheet)');
 if (!apply) { console.log('(dry run — add --apply)'); process.exit(0); }
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
@@ -53,6 +68,15 @@ for (const l of lines) for (const name of l.names) {
   for (const b of l.budgets) rows.push({ category_id: parent.id, month: b.month, amount: name === l.names[0] ? Math.round(b.amount * 100) / 100 : 0, note: l.note });
   await must(sb.from('pf_categories').update({ budget: name === l.names[0] ? l.budgets[0].amount : 0 }).eq('id', parent.id), name);
 }
+// income budgets sit on the Income sub-categories (the Budget tab lists income by source)
+const incomeParent = cats.find(c => c.parent_id === null && c.name === 'Income');
+let incomeRows = 0;
+for (const l of incomeLines) {
+  const sub = cats.find(c => c.parent_id === incomeParent?.id && c.name === l.sub);
+  if (!sub) { console.warn(`! no income sub-category called "${l.sub}" — skipped`); continue; }
+  for (const b of l.budgets) { rows.push({ category_id: sub.id, month: b.month, amount: Math.round(b.amount * 100) / 100, note: null }); incomeRows++; }
+  await must(sb.from('pf_categories').update({ budget: l.budgets[0].amount }).eq('id', sub.id), l.sub);
+}
 await must(sb.from('pf_budgets').upsert(rows), 'budgets');
 await must(sb.from('pf_settings').upsert({ key: 'discretionary_budget', value: String(Math.round(discBudget)) }), 'setting');
-console.log(`Applied: ${rows.length} budget rows, discretionary flags on ${lines.length} lines, discretionary budget R${Math.round(discBudget)}`);
+console.log(`Applied: ${rows.length} budget rows (${incomeRows} income), discretionary flags on ${lines.length} lines, discretionary budget R${Math.round(discBudget)}`);

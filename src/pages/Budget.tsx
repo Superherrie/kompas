@@ -9,7 +9,8 @@ type Sub = { id: number; name: string; disc?: boolean; actual: number }
 type Line = { id: number; name: string; color: string | null; budget: number | null; actual: number; subs: Sub[] }
 
 /** One accounting month as budget against actual, laid out like the income statement.
- *  Budgets live per category (pf_budgets, carried forward by budgetFor); sub-categories show their actual only.
+ *  Expenses are budgeted per category (pf_budgets, carried forward by budgetFor); their sub-categories show actual only.
+ *  Income is one category, so it is listed by SOURCE (its sub-categories: Salary, Rental Income, …), each with its own budget.
  *  Expenses: variance = budget − actual (positive = money left). Income: variance = actual − budget.
  *  Transfers and work claims are left out, as on the Income Statement. */
 export default function Budget() {
@@ -22,18 +23,20 @@ export default function Budget() {
   const { income, expense, incomeBudgeted, totals } = useMemo(() => {
     const build = (kind: 'income' | 'expense') => {
       const m = new Map<number, Line>()
+      // income lines are the sources (sub-categories); expense lines are the categories
+      const keyOf = (r: typeof monthly[number]) => kind === 'income' ? r.sub_id : r.cat_id
       for (const r of monthly) {
         if (r.kind !== kind || r.month !== month) continue
-        const line = m.get(r.cat_id) ?? { id: r.cat_id, name: r.cat_name, color: r.color, budget: null, actual: 0, subs: [] }
+        const line = m.get(keyOf(r)) ?? { id: keyOf(r), name: kind === 'income' ? r.sub_name : r.cat_name, color: r.color, budget: null, actual: 0, subs: [] }
         const v = kind === 'expense' ? -r.total : r.total
         line.actual += v
-        const s = line.subs.find(x => x.id === r.sub_id)
-        if (s) s.actual += v; else line.subs.push({ id: r.sub_id, name: r.sub_name, disc: r.discretionary, actual: v })
-        m.set(r.cat_id, line)
+        if (kind === 'expense') { const s = line.subs.find(x => x.id === r.sub_id); if (s) s.actual += v; else line.subs.push({ id: r.sub_id, name: r.sub_name, disc: r.discretionary, actual: v }) }
+        m.set(keyOf(r), line)
       }
-      // a category with a budget but nothing spent yet still belongs on the page
+      // a line with a budget but nothing booked yet still belongs on the page
+      const incomeParent = categories.find(c => c.parent_id === null && c.kind === 'income')
       for (const c of categories) {
-        if (c.parent_id !== null || c.kind !== kind) continue
+        if (kind === 'expense' ? c.parent_id !== null || c.kind !== 'expense' : c.parent_id !== incomeParent?.id) continue
         const b = budgetFor(c.id, month)
         if (b === undefined) continue
         const line = m.get(c.id) ?? { id: c.id, name: c.name, color: c.color, budget: null, actual: 0, subs: [] }
@@ -100,7 +103,8 @@ export default function Budget() {
             </thead>
             <tbody>
               <Section label="Income" />
-              {income.map(l => <Rows key={l.id} l={l} kind="income" month={month} open={open.has(l.id)} toggle={() => toggle(l.id)} onCell={setCell} />)}
+              {income.length === 0 && <tr><td colSpan={4} className="px-3 py-2 text-xs text-muted font-sans">Nothing received yet this month.</td></tr>}
+              {income.map(l => <Rows key={l.id} l={l} kind="income" month={month} open={false} toggle={() => undefined} onCell={setCell} />)}
               <TotalRow label="Total income" budget={totals.incomeBudget} actual={totals.incomeActual} kind="income" />
               {!incomeBudgeted && <tr><td colSpan={4} className="px-3 pb-2 text-[11px] text-muted font-sans">No income budget has been set, so income shows actuals only.</td></tr>}
               <Section label="Expenses" />
@@ -150,14 +154,17 @@ function Figure({ v, onClick, className = '' }: { v: number; onClick: () => void
 
 function Rows({ l, kind, month, open, toggle, onCell }: { l: Line; kind: 'income' | 'expense'; month: string; open: boolean; toggle: () => void; onCell: (c: Cell) => void }) {
   const over = kind === 'expense' && l.budget !== null && l.actual > l.budget + 0.5
+  const expandable = kind === 'expense'
+  // an income line is a sub-category (source); an expense line is a category
+  const cell: Cell = kind === 'income' ? { name: l.name, month, subId: l.id } : { name: l.name, month, catId: l.id }
   return (
     <>
       <tr className="border-t border-line hover:bg-surface-2">
-        <td className="py-2 pl-3 pr-1 font-sans font-medium sticky left-0 bg-surface cursor-pointer" onClick={toggle}>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full shrink-0" style={{ background: l.color ?? 'var(--muted)' }} /><span className="truncate max-w-[6.5rem] md:max-w-none">{l.name}</span><Icon name="right" size={13} className={`text-muted shrink-0 transition ${open ? 'rotate-90' : ''}`} /></span>
+        <td className={`py-2 pl-3 pr-1 font-sans font-medium sticky left-0 bg-surface ${expandable ? 'cursor-pointer' : ''}`} onClick={expandable ? toggle : undefined}>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full shrink-0" style={{ background: l.color ?? 'var(--muted)' }} /><span className="truncate max-w-[6.5rem] md:max-w-none">{l.name}</span>{expandable && <Icon name="right" size={13} className={`text-muted shrink-0 transition ${open ? 'rotate-90' : ''}`} />}</span>
         </td>
         <td className="text-right px-1 whitespace-nowrap text-muted">{l.budget === null ? '—' : rand0(l.budget)}</td>
-        <Figure v={l.actual} onClick={() => onCell({ name: l.name, month, catId: l.id })} className={over ? 'text-bad font-semibold' : ''} />
+        <Figure v={l.actual} onClick={() => onCell(cell)} className={over ? 'text-bad font-semibold' : ''} />
         <td className="text-right pl-1 pr-3 whitespace-nowrap"><Variance budget={l.budget} actual={l.actual} kind={kind} /></td>
       </tr>
       {open && l.subs.map(s => (
