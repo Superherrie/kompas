@@ -2,6 +2,23 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Icon, { Logo } from './Icon'
 import { useAuth } from '../context/AuthContext'
+import { useLoad } from '../lib/data'
+import { stamp } from '../lib/format'
+import { supabase } from '../lib/supabase'
+
+/** "Updated today 12:10" — the last time bank mails or a statement were loaded (every load writes pf_sync_log).
+ *  Re-read when the app comes back to the foreground and every 10 minutes; coral once the 4×-a-day sync has been quiet for 8 hours. */
+function LastSync({ tone }: { tone: string }) {
+  const { data: at, reload } = useLoad(async () => (await supabase.from('pf_sync_log').select('created_at').order('created_at', { ascending: false }).limit(1)).data?.[0]?.created_at as string | undefined, [])
+  useEffect(() => {
+    const again = () => { if (document.visibilityState === 'visible') void reload() }
+    document.addEventListener('visibilitychange', again); const t = setInterval(again, 10 * 60_000)
+    return () => { document.removeEventListener('visibilitychange', again); clearInterval(t) }
+  }, [reload])
+  if (!at) return null
+  const hours = (Date.now() - Date.parse(at)) / 36e5
+  return <span className={`text-xs ${hours > 8 ? 'text-coral font-medium' : tone}`} title={hours > 8 ? `No bank update for ${Math.round(hours)} hours` : 'Last time bank transactions were loaded'}>Updated {stamp(at)}</span>
+}
 
 const NAV = [
   { to: '/', label: 'Today', icon: 'today', end: true },
@@ -32,7 +49,8 @@ export default function Layout() {
     <div className="min-h-full md:flex">
       {/* desktop rail */}
       <aside className="hidden md:flex md:w-60 md:flex-col md:fixed md:inset-y-0 bg-pine-deep text-[#eef0e6] p-5">
-        <div className="flex items-center gap-3 mb-8"><Logo size={36} /><span className="display text-2xl">Kompas</span></div>
+        <div className="flex items-center gap-3"><Logo size={36} /><span className="display text-2xl">Kompas</span></div>
+        <div className="mt-1 mb-7 pl-12"><LastSync tone="text-white/55" /></div>
         <nav className="flex-1 space-y-1">
           {NAV.map(n => (
             <NavLink key={n.to} to={n.to} end={n.end}
@@ -52,6 +70,7 @@ export default function Layout() {
         {/* phone: a slim brand bar that sits under the notch / Dynamic Island */}
         <header className="md:hidden sticky top-0 z-20 flex items-center gap-2 px-4 pt-[max(env(safe-area-inset-top),0.6rem)] pb-2 bg-bg/90 backdrop-blur">
           <Logo size={26} /><span className="display text-lg">Kompas</span>
+          <span className="ml-auto"><LastSync tone="text-muted" /></span>
         </header>
         <div className="mx-auto max-w-6xl px-4 md:px-8 md:pt-8"><Outlet /></div>
       </main>

@@ -17,5 +17,12 @@ export const addMonths = (m: string, n: number) => {
   const d = new Date(+m.slice(0, 4), +m.slice(5, 7) - 1 + n, 1)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
+/** a timestamp as 'today 12:10' / 'yesterday 21:10' / '4 Nov 12:10', in the device's time */
+export const stamp = (iso: string) => {
+  const d = new Date(iso); const day = d.toLocaleDateString('sv')
+  const yesterday = new Date(Date.now() - 864e5).toLocaleDateString('sv')
+  const time = d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return `${day === today() ? 'today' : day === yesterday ? 'yesterday' : `${d.getDate()} ${MONTHS[d.getMonth()]}`} ${time}`
+}
 /** '2026-09-20' → 'Sun 20 Sep' */
 export const dayLabel = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' })
