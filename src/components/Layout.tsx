@@ -25,6 +25,7 @@ const NAV = [
   { to: '/overview', label: 'Overview', icon: 'chart' },
   { to: '/statement', label: 'Income Statement', icon: 'table' },
   { to: '/budget', label: 'Budget', icon: 'target' },
+  { to: '/balance', label: 'Balance Sheet', icon: 'scale' },
   { to: '/rental', label: 'Rental Property', icon: 'home' },
   { to: '/categories', label: 'Categories', icon: 'layers' },
   { to: '/transactions', label: 'Transactions', icon: 'list' },

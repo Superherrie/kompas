@@ -13,6 +13,7 @@ import Settings from './pages/Settings'
 import ClaimsRecon from './pages/ClaimsRecon'
 import IncomeStatement from './pages/IncomeStatement'
 import Budget from './pages/Budget'
+import Balance from './pages/Balance'
 import Rental from './pages/Rental'
 
 // the statement parsers pull in pdf.js and SheetJS — only load them when someone imports
@@ -51,6 +52,7 @@ function Shell() {
           <Route path="overview" element={<Overview />} />
           <Route path="statement" element={<IncomeStatement />} />
           <Route path="budget" element={<Budget />} />
+          <Route path="balance" element={<Balance />} />
           <Route path="rental" element={<Rental />} />
           <Route path="categories" element={<Categories />} />
           <Route path="categories/:level/:id" element={<CategoryDetail />} />
