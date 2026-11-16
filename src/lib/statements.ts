@@ -19,21 +19,24 @@ export async function parseFnbPdf(file: File): Promise<Parsed> {
   let y = +pm[3], m = MONTHS[pm[2].slice(0, 3)]; const endY = +pm[6], endM = MONTHS[pm[5].slice(0, 3)]
   for (let i = 0; i < 4; i++) { monthYear.set(m, y); if (y > endY || (y === endY && m >= endM)) break; m++; if (m === 13) { m = 1; y++ } }
 
-  const rows: StatementRow[] = []; let skipped = 0
+  const rows: StatementRow[] = []; const skipped = 0
   for (const line of layout) {
     const dm = line.trim().match(/^(\d{1,2})\s*([A-Z][a-z]{2})\s+(.*)$/)
     if (!dm || !MONTHS[dm[2]] || !monthYear.has(MONTHS[dm[2]])) continue
     const toks = dm[3].trim().split(/\s+/); const tail: string[] = []
     while (toks.length && MONEY.test(toks[toks.length - 1]) && tail.length < 3) tail.unshift(toks.pop()!)
     if (tail.length < 2) continue
-    const description = toks.join(' ').trim()
-    if (!description) { skipped++; continue }            // bank-charge summary lines carry no description
+    // the PDF's font splits "W" from the rest of the word ("W isdom", "W oolworths")
+    let description = toks.join(' ').replace(/\bW (?=[a-z])/g, 'W').trim()
     const am = tail[0].match(MONEY)!, bal = tail[1].match(MONEY)!
     const num = (s: string) => parseFloat(s.replace(/,/g, ''))
-    rows.push({
-      date: `${monthYear.get(MONTHS[dm[2]])}-${String(MONTHS[dm[2]]).padStart(2, '0')}-${dm[1].padStart(2, '0')}`,
-      description, amount: am[2] === 'Cr' ? num(am[1]) : -num(am[1]), balance: bal[2] === 'Cr' ? num(bal[1]) : -num(bal[1]),
-    })
+    const date = `${monthYear.get(MONTHS[dm[2]])}-${String(MONTHS[dm[2]]).padStart(2, '0')}-${dm[1].padStart(2, '0')}`
+    const amount = am[2] === 'Cr' ? num(am[1]) : -num(am[1])
+    if (!description) {
+      // FNB prints its own charges (monthly fee, payment fees) with no description — they are real debits
+      description = 'FNB Service Fee'
+    }
+    rows.push({ date, description, amount, balance: bal[2] === 'Cr' ? num(bal[1]) : -num(bal[1]) })
   }
   return { account: 'FNB', rows, period: `${pm[1]} ${pm[2]} ${pm[3]} – ${pm[4]} ${pm[5]} ${pm[6]}`, skipped }
 }

@@ -10,7 +10,8 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const env = Object.fromEntries(readFileSync(new URL('./.env', import.meta.url), 'utf8').split(/\r?\n/).map(l => l.match(/^([A-Z_]+)\s*=\s*(.+)$/)).filter(Boolean).map(m => [m[1], m[2].trim()]));
 const sb = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-const args = process.argv.slice(2); const dry = args.includes('--dry'); const files = args.filter(a => a !== '--dry');
+// --fees-only loads just FNB's own service-fee lines (back-fill for statements imported before those were read)
+const args = process.argv.slice(2); const dry = args.includes('--dry'); const onlyFees = args.includes('--fees-only'); const files = args.filter(a => !a.startsWith('--'));
 if (!files.length) { console.error('usage: node scripts/import-statements.mjs [--dry] <files>'); process.exit(1); }
 
 const MONTHS = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
@@ -43,7 +44,7 @@ async function parseFnbPdf(path) {
   if (!pm) throw new Error('No "Statement Period" found — is this an FNB statement PDF?');
   const monthYear = new Map(); let y = +pm[3], m = MONTHS[pm[2].slice(0, 3)]; const endY = +pm[6], endM = MONTHS[pm[5].slice(0, 3)];
   for (let i = 0; i < 4; i++) { monthYear.set(m, y); if (y > endY || (y === endY && m >= endM)) break; m++; if (m === 13) { m = 1; y++; } }
-  const rows = []; let skipped = 0;
+  const rows = []; const skipped = 0;
   for (const line of layout) {
     const dm = line.trim().match(/^(\d{1,2})\s*([A-Z][a-z]{2})\s+(.*)$/);
     if (!dm || !MONTHS[dm[2]] || !monthYear.has(MONTHS[dm[2]])) continue;
@@ -51,13 +52,19 @@ async function parseFnbPdf(path) {
     while (toks.length && MONEY.test(toks[toks.length - 1]) && tail.length < 3) tail.unshift(toks.pop());
     if (tail.length < 2) continue;
     // the PDF's font splits "W" from the rest of the word ("W isdom", "W oolworths")
-    const description = toks.join(' ').replace(/\bW (?=[a-z])/g, 'W').trim();
-    if (!description) { skipped++; continue; }
+    let description = toks.join(' ').replace(/\bW (?=[a-z])/g, 'W').trim();
     const am = tail[0].match(MONEY), bal = tail[1].match(MONEY);
-    rows.push({ date: `${monthYear.get(MONTHS[dm[2]])}-${String(MONTHS[dm[2]]).padStart(2, '0')}-${dm[1].padStart(2, '0')}`,
-      description, amount: am[2] === 'Cr' ? num(am[1]) : -num(am[1]), balance: bal[2] === 'Cr' ? num(bal[1]) : -num(bal[1]) });
+    const date = `${monthYear.get(MONTHS[dm[2]])}-${String(MONTHS[dm[2]]).padStart(2, '0')}-${dm[1].padStart(2, '0')}`;
+    const amount = am[2] === 'Cr' ? num(am[1]) : -num(am[1]);
+    if (!description) {
+      // FNB prints its own charges (monthly fee, payment fees) with no description — they are real debits
+      description = 'FNB Service Fee';
+    }
+    rows.push({ date, description, amount, balance: bal[2] === 'Cr' ? num(bal[1]) : -num(bal[1]) });
   }
-  return { account: 'FNB', rows, period: `${pm[1]} ${pm[2]} ${pm[3]} – ${pm[4]} ${pm[5]} ${pm[6]}`, skipped };
+  // opening and closing balance as printed, for the reconciliation
+  const bal = (label) => { const m = text.match(new RegExp(label + '\\s*([\\d,]+\\.\\d{2})\\s*(Cr|Dr)?')); return m ? (m[2] === 'Cr' ? 1 : -1) * num(m[1]) : null; };
+  return { account: 'FNB', rows, period: `${pm[1]} ${pm[2]} ${pm[3]} – ${pm[4]} ${pm[5]} ${pm[6]}`, skipped, opening: bal('Opening Balance'), closing: bal('Closing Balance') };
 }
 
 function parseDiscoveryXlsx(path, hint) {
@@ -91,6 +98,13 @@ const hint = (cat, sub, amount) => {
 for (const path of files) {
   const parsed = /\.pdf$/i.test(path) ? await parseFnbPdf(path) : parseDiscoveryXlsx(path, hint);
   console.log(`\n== ${basename(path)} → ${parsed.account}, ${parsed.rows.length} lines, ${parsed.period}${parsed.skipped ? `, ${parsed.skipped} skipped` : ''}`);
+  if (parsed.opening != null && parsed.closing != null) {
+    // the statement must foot: opening balance + every line = closing balance
+    const moved = parsed.rows.reduce((s, r) => s + r.amount, 0), diff = Math.round((parsed.opening + moved - parsed.closing) * 100) / 100;
+    console.log(`   recon: opening ${parsed.opening.toFixed(2)} + lines ${moved.toFixed(2)} = ${(parsed.opening + moved).toFixed(2)} vs closing ${parsed.closing.toFixed(2)} → ${diff === 0 ? 'FOOTS' : `OUT BY ${diff}`}`);
+  }
+  if (onlyFees) parsed.rows = parsed.rows.filter(r => r.description.startsWith('FNB Service Fee'));
+  if (!parsed.rows.length) { console.log('   nothing to load'); continue; }
   const dates = parsed.rows.map(r => r.date).sort(); const from = dates[0], to = dates[dates.length - 1];
   const { data: acc } = await sb.from('pf_accounts').select('id').ilike('name', parsed.account).single();
   const { data: have } = await sb.from('pf_transactions').select('id,txn_date,txn_time,description,amount,status,source,norm')
