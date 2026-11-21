@@ -108,7 +108,7 @@ function TxnSheet({ t, categories, onClose, onSaved }: { t: Txn; categories: Cat
   async function save() {
     setBusy(true); setError(undefined)
     if (cat && cat !== t.sub_id && !claimable) { const { error } = await supabase.rpc('pf_set_category', { p_txn: t.id, p_category: cat, p_remember: remember }); if (error) { setError(error.message); setBusy(false); return } }
-    if (claimable !== t.claimable) await supabase.rpc('pf_set_txn_claimable', { p_txn: t.id, p_claimable: claimable })
+    if (claimable !== t.claimable) { const { error } = await supabase.rpc('pf_set_txn_claimable', { p_txn: t.id, p_claimable: claimable }); if (error) { setError(error.message); setBusy(false); return } }
     if (period !== t.month) await supabase.rpc('pf_set_period', { p_txn: t.id, p_period: period })
     if (note !== (t.note ?? '')) await supabase.from('pf_transactions').update({ note: note || null }).eq('id', t.id)
     onSaved()
